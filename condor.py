@@ -71,18 +71,23 @@ class Condor():
 
 	def get_nodes(self):
 
-		nodes = list()
+		self.rows = list()
 		coll = htcondor.Collector()
-		query = coll.query(htcondor.AdTypes.Startd,projection = ['UtsnameNodename','Name','CpuBusy','TotalLoadAvg','State','MyType'])
+		query = coll.query(htcondor.AdTypes.Startd)
 
 		for node in range(len(query)):
 
+			row = dict()
+
 			for key in query[node].keys():
 
-				nodes.append({key: query[node].get(key)})
+				row[key] = query[node].get(key)
 
-		print nodes
+				print key
+			self.rows.append(row)
+
+		return self.rows
 		
 
-condor = Condor()
-condor.get_nodes()
+#condor = Condor()
+#condor.get_nodes()
