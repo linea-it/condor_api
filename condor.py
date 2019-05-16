@@ -2,87 +2,85 @@ import htcondor
 import classad
 import json
 
+
 class Condor():
 
+    def __init__(self):
 
-	def __init__(self):
-		
-		self.jobs = []
-		
-		try:
-			for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
-                		self.schedd = htcondor.Schedd(schedd_ad)
-                        	self.jobs += self.schedd.xquery()
+        self.jobs = []
 
-					
-		except:
-  			print("An exception occurred")
+        try:
+            for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
+                self.schedd = htcondor.Schedd(schedd_ad)
+                self.jobs += self.schedd.xquery()
 
-	def list_parms(self):
+        except:
+            print("An exception occurred")
 
+    def list_parms(self):
 
-		keys = []
+        keys = []
 
-		if len(self.jobs):
-			for key in self.jobs[0].keys():
+        if len(self.jobs):
+            for key in self.jobs[0].keys():
 
-				keys.append(key)
+                keys.append(key)
 
-			return ({'Parms':keys, 'Desc': 'Parameters list'})
+            return ({'Parms': keys, 'Desc': 'Parameters list'})
 
-		else:
-			
-			return false
+        else:
 
+            return false
 
-	def get_jobs(self):
+    def get_jobs(self):
 
-		self.job_procs = {}
-		self.info = {}
+        self.job_procs = {}
+        self.info = {}
 
-                rows = list()
+        rows = list()
 
-		for job in range(len(self.jobs)):
+        for job in range(len(self.jobs)):
 
-			del self.jobs[job]['Environment']
+            del self.jobs[job]['Environment']
 
-			process = str(self.jobs[job]).split('/0000')[1].split('/')[0]
-			jobid = self.jobs[job]['GlobalJobId']
-			self.info['owner'] = self.jobs[job]['Owner']
-			print self.jobs[job]
+            process = str(self.jobs[job]).split('/0000')[1].split('/')[0]
+            jobid = self.jobs[job]['GlobalJobId']
+            self.info['owner'] = self.jobs[job]['Owner']
+            print(self.jobs[job])
 
-		        row = dict({
-				'process': process,
-				'jobid': jobid,
-			})
+            row = dict({
+                'process': process,
+                'jobid': jobid,
+            })
 
-		   	for info in self.jobs[job]:
+            for info in self.jobs[job]:
 
-				row[info] = str(self.jobs[job][info])
-					
-			rows.append(row) 
+                row[info] = str(self.jobs[job][info])
 
+            rows.append(row)
 
+        return rows
 
-		return rows
-		
+    def get_nodes(self):
 
+        nodes = list()
+        coll = htcondor.Collector()
+        query = coll.query(htcondor.AdTypes.Startd, projection=[
+                           'UtsnameNodename', 'Name', 'CpuBusy', 'TotalLoadAvg', 'State', 'MyType'])
 
+        for node in range(len(query)):
 
-	def get_nodes(self):
+            for key in query[node].keys():
 
-		nodes = list()
-		coll = htcondor.Collector()
-		query = coll.query(htcondor.AdTypes.Startd,projection = ['UtsnameNodename','Name','CpuBusy','TotalLoadAvg','State','MyType'])
+                nodes.append({key: query[node].get(key)})
 
-		for node in range(len(query)):
+        print(nodes)
 
-			for key in query[node].keys():
+    def submit_job(self, params):
 
-				nodes.append({key: query[node].get(key)})
+        print"Params: ", params
 
-		print nodes
-		
-
-condor = Condor()
-condor.get_nodes()
+        return dict({
+            'success': True,
+            'hello': "Teste"
+        })
