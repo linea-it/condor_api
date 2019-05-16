@@ -29,8 +29,7 @@ class Condor():
             return ({'Parms': keys, 'Desc': 'Parameters list'})
 
         else:
-
-            return false
+            return False
 
     def get_jobs(self):
 
@@ -62,23 +61,25 @@ class Condor():
         return rows
 
     def get_nodes(self):
-
-        nodes = list()
+        self.rows = list()
         coll = htcondor.Collector()
-        query = coll.query(htcondor.AdTypes.Startd, projection=[
-                           'UtsnameNodename', 'Name', 'CpuBusy', 'TotalLoadAvg', 'State', 'MyType'])
+        query = coll.query(htcondor.AdTypes.Startd)
 
         for node in range(len(query)):
+            row = dict()
 
             for key in query[node].keys():
+                row[key] = str(query[node].get(key))
 
-                nodes.append({key: query[node].get(key)})
+                print (key)
+                
+            self.rows.append(row)
 
-        print(nodes)
+        return self.rows        
 
     def submit_job(self, params):
 
-        print"Params: ", params
+        print ("Params: ", params)
 
         return dict({
             'success': True,

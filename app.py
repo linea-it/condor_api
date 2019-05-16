@@ -1,9 +1,9 @@
+from condor import Condor
+from pycondor import Job, Dagman
 from flask import Flask
 from flask import render_template
-from flask import jsonify
 from flask import request
-from pycondor import Job, Dagman
-from condor import Condor
+from flask import jsonify
 
 application = Flask(__name__)
 
@@ -13,7 +13,7 @@ def index():
 
     condor_m = Condor()
 
-    response = jsonify(condor_m.get_jobs())
+    response = jsonify(condor_m.list_parms())
 
     return response
 #    return render_template('index.html')
@@ -26,6 +26,26 @@ def submit_job():
     result = condor_m.submit_job(request.json)
 
     response = jsonify(result)
+
+    return response
+
+
+@application.route('/jobs')
+def jobs():
+
+    condor_m = Condor()
+
+    response = jsonify(condor_m.get_jobs())
+
+    return response
+
+
+@application.route('/nodes')
+def nodes():
+
+    condor_m = Condor()
+
+    response = jsonify(condor_m.get_nodes())
 
     return response
 
