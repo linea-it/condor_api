@@ -1,5 +1,5 @@
 from condor import Condor
-from pycondor import Job, Dagman
+#from pycondor import Job, Dagman
 from flask import Flask
 from flask import render_template
 from flask import request
@@ -30,7 +30,7 @@ def submit_job():
     return response
 
 
-@application.route('/jobs')
+@application.route('/jobs', methods=['GET'])
 def jobs():
 
     condor_m = Condor()
@@ -40,7 +40,7 @@ def jobs():
     return response
 
 
-@application.route('/nodes')
+@application.route('/nodes', methods=['GET'])
 def nodes():
 
     condor_m = Condor()
@@ -51,4 +51,4 @@ def nodes():
 
 
 if __name__ == '__main__':
-    application.run(host='186.232.60.33', port=5001, debug=True)
+    application.run(host='186.232.60.33', port=5000, debug=True)
