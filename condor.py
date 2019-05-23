@@ -10,12 +10,14 @@ class Condor():
         self.jobs = []
 
         try:
-            for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
+            for schedd_ad in htcondor.Collector().locateAll(
+                    htcondor.DaemonTypes.Schedd):
                 self.schedd = htcondor.Schedd(schedd_ad)
                 self.jobs += self.schedd.xquery()
 
-        except:
+        except Exception as e:
             print("An exception occurred")
+            raise e
 
     def list_parms(self):
 
@@ -71,17 +73,53 @@ class Condor():
             for key in query[node].keys():
                 row[key] = str(query[node].get(key))
 
-                print (key)
-                
+                print(key)
+
             self.rows.append(row)
 
-        return self.rows        
+        return self.rows
 
     def submit_job(self, params):
 
-        print ("Params: ", params)
+        print("Params: ", params)
+
+        n_queues = params.get("queues", 1)
+
+        submit_param = params.get("submit_params", None)
+        if submit_param is None:
+            return dict({
+                'success': False,
+                'message': "NENHUM PARAMETRO DE SUBMISSAO FOI ENVIADO."
+            })
+
+        print(self.schedd)
+
+        sub = htcondor.Submit(submit_param)
+
+        with self.schedd.transaction() as txn:
+            clusterId = sub.queue(txn, n_queues)
+
+        print("clusterId:")
+        print(clusterId)
+
+        # Listar os jobs
+        # TODO: pode usar a funcao get_jobs do valter.
+        jobs = list()
+        for job in self.schedd.xquery(
+                projection=['ClusterId', 'ProcId', 'JobStatus'],
+                requirements='ClusterId==%s' % clusterId):
+            jobs.append(self.parse_job_to_dict(job))
+            print(self.parse_job_to_dict(job))
 
         return dict({
             'success': True,
-            'hello': "Teste"
+            'jobs': jobs
         })
+
+    def parse_job_to_dict(self, job):
+        j = dict()
+
+        for key in job.keys():
+            j[key] = str(job.get(key))
+
+        return j
