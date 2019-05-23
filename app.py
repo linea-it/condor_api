@@ -33,9 +33,16 @@ def submit_job():
 @application.route('/jobs', methods=['GET'])
 def jobs():
 
+    args = []
+    match = myString = ",".join(request.args.getlist('match'))
+    
+    if len(request.args):
+        args = request.args.keys()
+	if 'match' in args:
+		args.remove('match')
     condor_m = Condor()
 
-    response = jsonify(condor_m.get_jobs())
+    response = jsonify(condor_m.get_jobs(match,args))
 
     return response
 
@@ -43,9 +50,17 @@ def jobs():
 @application.route('/nodes', methods=['GET'])
 def nodes():
 
+    args = []
+    match = myString = ",".join(request.args.getlist('match'))
+
+    if len(request.args):
+        args = request.args.keys()
+        if 'match' in args:
+                args.remove('match')
+
     condor_m = Condor()
 
-    response = jsonify(condor_m.get_nodes())
+    response = jsonify(condor_m.get_nodes(match,args))
 
     return response
 
