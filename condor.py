@@ -26,6 +26,7 @@ class Condor():
 
         except Exception as e:
             print("An exception occurred") + str(e)
+            raise e
 
         self.job_procs = {}
         self.info = {}
@@ -76,10 +77,44 @@ class Condor():
         return self.rows
 
     def submit_job(self, params):
-
+        # TODO tratar execessao nesta funcao.
         print("Params: ", params)
+
+        n_queues = params.get("queues", 1)
+
+        submit_param = params.get("submit_params", None)
+        if submit_param is None:
+            return dict({
+                'success': False,
+                'message': "NENHUM PARAMETRO DE SUBMISSAO FOI ENVIADO."
+            })
+
+        schedd = htcondor.Schedd()
+        sub = htcondor.Submit(submit_param)
+
+        with schedd.transaction() as txn:
+            clusterId = sub.queue(txn, n_queues)
+
+        print("clusterId:")
+        print(clusterId)
+
+        # Listar os jobs
+        jobs = list()
+        for job in schedd.xquery(
+                projection=['ClusterId', 'ProcId', 'JobStatus'],
+                requirements='ClusterId==%s' % clusterId):
+            jobs.append(self.parse_job_to_dict(job))
+            print(self.parse_job_to_dict(job))
 
         return dict({
             'success': True,
-            'hello': "Teste"
+            'jobs': jobs
         })
+
+    def parse_job_to_dict(self, job):
+        j = dict()
+
+        for key in job.keys():
+            j[key] = str(job.get(key))
+
+        return j
