@@ -77,7 +77,7 @@ class Condor():
         return self.rows
 
     def submit_job(self, params):
-
+        # TODO tratar execessao nesta funcao.
         print("Params: ", params)
 
         n_queues = params.get("queues", 1)
@@ -89,20 +89,18 @@ class Condor():
                 'message': "NENHUM PARAMETRO DE SUBMISSAO FOI ENVIADO."
             })
 
-        print(self.schedd)
-
+        schedd = htcondor.Schedd()
         sub = htcondor.Submit(submit_param)
 
-        with self.schedd.transaction() as txn:
+        with schedd.transaction() as txn:
             clusterId = sub.queue(txn, n_queues)
 
         print("clusterId:")
         print(clusterId)
 
         # Listar os jobs
-        # TODO: pode usar a funcao get_jobs do valter.
         jobs = list()
-        for job in self.schedd.xquery(
+        for job in schedd.xquery(
                 projection=['ClusterId', 'ProcId', 'JobStatus'],
                 requirements='ClusterId==%s' % clusterId):
             jobs.append(self.parse_job_to_dict(job))
