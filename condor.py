@@ -1,57 +1,64 @@
 import htcondor
 import classad
 import json
-
+import urllib
 
 class Condor():
 
-    def get_jobs(self, match, *args):
+    def get_jobs(self,args,cols):
 
-        self.default_params = [
-            'Args', 'GlobalJobId', 'JobStartDate', 'JobStatus',
-            'Out', 'Owner', 'RemoteHost', 'RequestCpus',
-            'RequiresWholeMachine', 'UserLog']
+      self.default_params = ['Args', 'GlobalJobId','JobStartDate','JobStatus','Out','Owner','RemoteHost','RequestCpus','RequiresWholeMachine', 'UserLog']
+      self.params = self.default_params + str(cols).split(',')
+      self.requirements = ''
 
-        self.params = self.default_params + args[0]
-        self.requirements = str(match).replace(
-            "=", "==").replace(',', '&&') if match else None
-        self.jobs = []
+      if len(args):
 
-        try:
-            for schedd_ad in htcondor.Collector().locateAll(
-                    htcondor.DaemonTypes.Schedd):
-                self.schedd = htcondor.Schedd(schedd_ad)
-                self.jobs += self.schedd.xquery(projection=self.params,
-                                                requirements=self.requirements)
+        t = 0
+        for arg in args:
+          self.requirements += arg + '==' + str(args[arg])
+          if t <= len(args) - 2:
+            self.requirements += '&&'
+            t = t + 1
+      else:
+        self.requirements = None
 
-        except Exception as e:
-            print("An exception occurred") + str(e)
-            raise e
+      self.jobs = []
 
-        self.job_procs = {}
-        self.info = {}
+      try:
+          for schedd_ad in htcondor.Collector().locateAll(
+                  htcondor.DaemonTypes.Schedd):
+              self.schedd = htcondor.Schedd(schedd_ad)
+              self.jobs += self.schedd.xquery(projection=self.params,
+                                              requirements=self.requirements)
 
-        rows = list()
+      except Exception as e:
+          print("An exception occurred") + str(e)
+          raise e
 
-        for job in range(len(self.jobs)):
+      self.job_procs = {}
+      self.info = {}
 
-            process = None
-            process = self.jobs[job]['Args'].split(' ')[0]
-            jobid = self.jobs[job]['GlobalJobId']
-            self.info['owner'] = self.jobs[job]['Owner']
+      rows = list()
 
-            row = dict({
-                'Process': process,
-                'Job': jobid,
-            })
+      for job in range(len(self.jobs)):
 
-            for info in self.jobs[job]:
+          process = None
+          process = self.jobs[job]['Args'].split(' ')[0]
+          jobid = self.jobs[job]['GlobalJobId']
+          self.info['owner'] = self.jobs[job]['Owner']
 
-                row[info] = str(self.jobs[job][info])
+          row = dict({
+              'Process': process,
+              'Job': jobid,
+          })
 
-            rows.append(row)
+          for info in self.jobs[job]:
 
-        return rows
+              row[info] = str(self.jobs[job][info])
+
+          rows.append(row)
+
+      return rows
 
     def get_nodes(self, match, *args):
 
