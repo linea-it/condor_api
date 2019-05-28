@@ -1,5 +1,4 @@
 from condor import Condor
-#from pycondor import Job, Dagman
 from flask import Flask
 from flask import render_template
 from flask import request
@@ -32,7 +31,6 @@ def submit_job():
 
 @application.route('/jobs', methods=['GET'])
 def jobs():
-
     cols = list()
     args = dict()
 
@@ -50,6 +48,7 @@ def jobs():
 
     response = jsonify(condor_m.get_jobs(args,cols))
 
+
     return response
 
 
@@ -62,11 +61,11 @@ def nodes():
     if len(request.args):
         args = request.args.keys()
         if 'match' in args:
-                args.remove('match')
+            args.remove('match')
 
     condor_m = Condor()
 
-    response = jsonify(condor_m.get_nodes(match,args))
+    response = jsonify(condor_m.get_nodes(match, args))
 
     return response
 
