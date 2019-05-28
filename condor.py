@@ -5,9 +5,6 @@ import urllib
 
 class Condor():
 
-    def get_jobs(self, match, *args):
-
-
     def get_jobs(self,args,cols):
 
       self.default_params = ['Args', 'GlobalJobId','JobStartDate','JobStatus','Out','Owner','RemoteHost','RequestCpus','RequiresWholeMachine', 'UserLog']
@@ -61,7 +58,7 @@ class Condor():
 
           rows.append(row)
 
-        return rows
+      return rows
 
     def get_nodes(self, match, *args):
 

@@ -12,9 +12,6 @@ def index():
 
     condor_m = Condor()
 
-    #response = jsonify(condor_m.list_parms())
-
-#    return response
     return render_template('index.html')
 
 

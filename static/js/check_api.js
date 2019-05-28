@@ -1,5 +1,8 @@
 $( document ).ready(function() {
-$.get( "http://loginicx.linea.gov.br:5000/jobs", function( data ) {
+
+var evtSource = new EventSource("http://loginicx.linea.gov.br:/5000/jobs");
+evtSource.onmessage = function(data) {
+//$.get( "http://loginicx.linea.gov.br:5000/jobs", function( data ) {
 
 	$('#jobs_total').text(data.length);
 
@@ -24,7 +27,8 @@ $.get( "http://loginicx.linea.gov.br:5000/jobs", function( data ) {
     		$('#users_table').append('<tr><td>'+users[i]+'</td></tr'); 
   	});
 
+}
 });
 
-})
+
 
