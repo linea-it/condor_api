@@ -1,16 +1,29 @@
 import htcondor
 import classad
 import json
-
+import urllib
 
 class Condor():
 
 
-    def get_jobs(self,match,*args):
+    def get_jobs(self,args,cols):
 
 	self.default_params = ['Args', 'GlobalJobId','JobStartDate','JobStatus','Out','Owner','RemoteHost','RequestCpus','RequiresWholeMachine', 'UserLog']
-	self.params = self.default_params + args[0]
-	self.requirements = str(match).replace("=","==").replace(',','&&') if match else None
+	self.params = self.default_params + str(cols).split(',')
+	self.requirements = ''
+
+	if len(args):
+
+		t = 0
+		for arg in args:
+			self.requirements += arg + '==' + str(args[arg])
+			if t <= len(args) - 2:
+				self.requirements += '&&'
+				t = t + 1
+	else:
+		self.requirements = None
+
+
         self.jobs = []
 
         try:

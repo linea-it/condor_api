@@ -13,10 +13,10 @@ def index():
 
     condor_m = Condor()
 
-    response = jsonify(condor_m.list_parms())
+    #response = jsonify(condor_m.list_parms())
 
-    return response
-#    return render_template('index.html')
+#    return response
+    return render_template('index.html')
 
 
 @application.route('/submit_job', methods=['POST'])
@@ -33,16 +33,22 @@ def submit_job():
 @application.route('/jobs', methods=['GET'])
 def jobs():
 
-    args = []
-    match = myString = ",".join(request.args.getlist('match'))
-    
+    cols = list()
+    args = dict()
+
     if len(request.args):
-        args = request.args.keys()
-	if 'match' in args:
-		args.remove('match')
+
+        args = request.args.to_dict()
+        if args.has_key('cols'):
+		args.pop('cols')
+
+    if request.args.get('cols'):
+
+        cols = request.args.get('cols')
+
     condor_m = Condor()
 
-    response = jsonify(condor_m.get_jobs(match,args))
+    response = jsonify(condor_m.get_jobs(args,cols))
 
     return response
 
