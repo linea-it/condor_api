@@ -63,8 +63,8 @@ class Condor():
     def get_nodes(self, match, *args):
 
         self.default_params = [
-            'UtsnameNodename', 'Name', 'State', 'DetectedMemory',
-            'TotalCpus', 'LoadAvg', 'Activity', 'JobStarts', 'RecentJobStarts']
+            'UtsnameNodename', 'Name', 'State', 'Memory','Disk',
+            'TotalCpus','RemoteOwner', 'LoadAvg', 'Activity', 'JobStarts', 'RecentJobStarts','DiskUsage']
         self.params = self.default_params + args[0]
         self.requirements = str(match).replace(
             "=", "==").replace(',', '&&') if match else None

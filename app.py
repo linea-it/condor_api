@@ -15,6 +15,14 @@ def index():
     return render_template('index.html')
 
 
+@application.route('/user')
+def user():
+
+    condor_m = Condor()
+
+    return render_template('user.html')
+
+
 @application.route('/submit_job', methods=['POST'])
 def submit_job():
 

@@ -29,11 +29,11 @@
     <ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar">
 
       <!-- Sidebar - Brand -->
-      <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
+      <a class="sidebar-brand d-flex align-items-center justify-content-center" href="#">
         <div class="sidebar-brand-icon rotate-n-15">
-          <i class="fas fa-laugh-wink"></i>
+          <i class="fas fa-atom"></i>
         </div>
-        <div class="sidebar-brand-text mx-3">Linea Monitoring Dashboard<sup>2</sup></div>
+        <div class="sidebar-brand-text mx-3">LIneA Monitoring Dashboard<sup></sup></div>
       </a>
 
       <!-- Divider -->
@@ -41,18 +41,11 @@
 
       <!-- Nav Item - Dashboard -->
       <li class="nav-item active">
-        <a class="nav-link" href="index.html">
+        <a class="nav-link" href="#">
           <i class="fas fa-fw fa-tachometer-alt"></i>
           <span>Dashboard</span></a>
       </li>
 
-      <!-- Divider -->
-      <hr class="sidebar-divider">
-
-      <!-- Heading -->
-      <div class="sidebar-heading">
-        Interface
-      </div>
 
       <hr class="sidebar-divider d-none d-md-block">
       <!-- Sidebar Toggler (Sidebar) -->
@@ -77,17 +70,6 @@
             <i class="fa fa-bars"></i>
           </button>
 
-          <!-- Topbar Search -->
-          <form class="d-none d-sm-inline-block form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100 navbar-search">
-            <div class="input-group">
-              <input type="text" class="form-control bg-light border-0 small" placeholder="Search for..." aria-label="Search" aria-describedby="basic-addon2">
-              <div class="input-group-append">
-                <button class="btn btn-primary" type="button">
-                  <i class="fas fa-search fa-sm"></i>
-                </button>
-              </div>
-            </div>
-          </form>
 
           <!-- Topbar Navbar -->
           <ul class="navbar-nav ml-auto">
@@ -153,7 +135,7 @@
           <!-- Page Heading -->
           <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
-            <a href="#" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm"><i class="fas fa-download fa-sm text-white-50"></i> Generate Report</a>
+            <a href="http://ticket.linea.gov.br/" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm"><i class="fas fa-download fa-sm text-white-50"></i> Generate Report</a>
           </div>
 
           <!-- Content Row -->
@@ -161,12 +143,12 @@
 
             <!-- Earnings (Monthly) Card Example -->
             <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-primary shadow h-100 py-2">
+              <div class="card border-left-danger shadow h-100 py-2">
                 <div class="card-body">
                   <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Servidores</div>
-                      <div id="servidores" class="h5 mb-0 font-weight-bold text-gray-800"></div>
+                      <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Servers</div>
+                      <div id="servers" class="h5 mb-0 font-weight-bold text-gray-800"></div>
                     </div>
                     <div class="col-auto">
                       <i class="fas fa-server fa-2x text-gray-300"></i>
@@ -178,11 +160,11 @@
 
             <!-- Earnings (Monthly) Card Example -->
             <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-success shadow h-100 py-2">
+              <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
                   <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Jobs</div>
+                      <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Jobs</div>
                       <div id="jobs_total" class="h5 mb-0 font-weight-bold text-gray-800"></div>
                     </div>
                     <div class="col-auto">
@@ -195,11 +177,11 @@
 
             <!-- Earnings (Monthly) Card Example -->
             <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-success shadow h-100 py-2">
+              <div class="card border-left-warning shadow h-100 py-2">
                 <div class="card-body">
                   <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Users</div>
+                      <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Users</div>
                       <div id="users" class="h5 mb-0 font-weight-bold text-gray-800"></div>
                     </div>
                     <div class="col-auto">
@@ -211,15 +193,15 @@
             </div>
             <!-- Pending Requests Card Example -->
             <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-warning shadow h-100 py-2">
+              <div class="card border-left-success shadow h-100 py-2">
                 <div class="card-body">
                   <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Jobs Running</div>
+                      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Jobs Running</div>
                       <div id="jobs_running" class="h5 mb-0 font-weight-bold text-gray-800"></div>
                     </div>
                     <div class="col-auto">
-                      <i class="fas fa-comments fa-2x text-gray-300"></i>
+                      <i class="fas fa-running fa-2x text-gray-300"></i>
                     </div>
                   </div>
                 </div>
@@ -232,11 +214,11 @@
           <div class="row">
 
             <!-- Area Chart -->
-            <div class="col-xl-8 col-lg-7">
+            <div class="col-md-6">
               <div class="card shadow mb-4">
                 <!-- Card Header - Dropdown -->
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                  <h6 class="m-0 font-weight-bold text-primary">Earnings Overview</h6>
+                  <h6 class="m-0 font-weight-bold text-primary">Nodes</h6>
                   <div class="dropdown no-arrow">
                     <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                       <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
@@ -252,19 +234,33 @@
                 </div>
                 <!-- Card Body -->
                 <div class="card-body">
-                  <div class="chart-area">
-                    <canvas id="myAreaChart"></canvas>
-                  </div>
+			<div class="table-responsive">
+			<table class="table table-bordered" width="100%" cellspacing="0" id="nodes_table">
+    			<thead>
+        			<tr>
+					<th>Node</th>
+					<th>Status</th>
+					<th>Load</th>
+					<th>Core</th>
+					<th>Jobs</th>
+					<th>Memory</th>
+					<th>Disk</th>
+        			</tr>
+    			</thead>
+			<tbody>
+			</tbody>
+			</table>
+			</div>
                 </div>
               </div>
             </div>
 
             <!-- Pie Chart -->
-            <div class="col-xl-4 col-lg-5">
+            <div class="col-md-6">
               <div class="card shadow mb-4">
                 <!-- Card Header - Dropdown -->
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                  <h6 class="m-0 font-weight-bold text-primary">Users Running Jobs</h6>
+                  <h6 class="m-0 font-weight-bold text-primary">Jobs</h6>
                   <div class="dropdown no-arrow">
                     <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                       <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
@@ -280,11 +276,20 @@
                 </div>
                 <!-- Card Body -->
                 <div class="card-body">
-	
-			<table id="users_table">
-			   <tr>
-			   </tr>	
-			</table>	
+			<div class="table-responsive">
+                        <table class="table table-bordered" cellspacing="0" id="jobs_table">
+                        <thead>
+                                <tr>
+                                        <th>Process</th>
+                                        <th>Owner</th>
+                                        <th>Status</th>
+                                        <th>Node</th>
+                                </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                        </table>
+		</div>
                 </div>
               </div>
             </div>
@@ -343,11 +348,9 @@
   <!-- Custom scripts for all pages-->
   <script src="static/js/sb-admin-2.min.js"></script>
   <!-- Page level plugins -->
-  <script src="static/vendor/chart.js/Chart.min.js"></script>
-
+  <script src="static/vendor/datatables/jquery.dataTables.min.js"></script>
+  <script src="static/vendor/datatables/dataTables.bootstrap4.min.js"></script>
   <!-- Page level custom scripts -->
-  <script src="static/js/demo/chart-area-demo.js"></script>
-  <script src="static/js/demo/chart-pie-demo.js"></script>
   <script src="static/js/check_api.js"></script>
 </body>
 
