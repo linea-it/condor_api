@@ -146,34 +146,49 @@
                 class="fas fa-download fa-sm text-white-50"></i> Generate Report</a>
           </div>
           <div class="row">
-              <div class="col-lg-6 mb-4">
+              <div class="col-md-5">
                   <div class="card shadow mb-4">
                     <div class="card-header py-3">
-                      <h6 class="m-0 font-weight-bold text-primary">Usuários</h6>
+                      <h6 class="m-0 font-weight-bold text-primary">Cluster</h6>
                     </div>
                     <div class="card-body">
-
+                        <div class="embed-responsive embed-responsive-16by9">
+                            <iframe id="iframe" src="https://srvlupa.linea.gov.br/gangliaicx/graph.php?r=hour&z=medium&c=Compute+Nodes&m=load_one&s=by+name&mc=2&g=load_report"></iframe>
+                        </div>
+                        <div class="embed-responsive embed-responsive-16by9">
+                            <iframe id="iframe" src="https://srvlupa.linea.gov.br/gangliaicx/graph.php?r=hour&z=medium&me=ICE&m=load_one&s=by+name&mc=2&g=mem_report"></iframe>
+                        </div>
+                    </div>
+                  </div>
+                </div>            
+         
+              <div class="col-md-7">
+                  <div class="card shadow mb-4">
+                    <div class="card-header py-3">
+                      <h6 class="m-0 font-weight-bold text-primary">Users</h6>
+                    </div>
+                    <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-borderless" id="users_table" width="100%" cellspacing="0">
                                 <thead>
                                     <tr>
                                       <th>User</th>
                                       <th>Portal Processes</th>
-                                      <th>Manualy Submited</th>
+                                      <th>Jobs Manualy Submited</th>
                                       <th>Cluster</th>
-                                      <th>Jobs</th>
+                                      <th>Jobs Running</th>
+                                      <th>Jobs Waiting</th>
                                       <th>% Cluster Utilization</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-
                                   </tbody>
                               </table>
                         </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              
           </div>
         </div>
       <footer class="sticky-footer bg-white">

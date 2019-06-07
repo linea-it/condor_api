@@ -1,14 +1,14 @@
 $(document).ready(function () {
 
-	$.fn.dataTable.ext.errMode = 'none';
+	//$.fn.dataTable.ext.errMode = 'none';
 
-	var jobs_url = "http://loginicx.linea.gov.br:5000/jobs"
+	var user_stats_url = "http://loginicx.linea.gov.br:5000/users_stats"
 	var nodes_url = "http://loginicx.linea.gov.br:5000/nodes"
 
 	var call = function () {
-		var jobs = $.ajax({
+		var users_stats = $.ajax({
 			dataType: "json",
-			url: jobs_url,
+			url: user_stats_url,
 			async: true,
 			success: function (result) { return result }	
 
@@ -21,13 +21,39 @@ $(document).ready(function () {
 			success: function (result) { return result }
 		});
 	
-		$.when(jobs, nodes).done(function (j, n) {
-			
-			var Count = j[0].map( function(user) {
+	$.when(users_stats, nodes).done(function (u, n) {
 
-			       });
+                if ( ! $.fn.DataTable.isDataTable( '#users_table' ) ) {
+                        var table = $('#users_table').DataTable({
+                               "data":u[0],
+
+                               "aoColumns": [
+                                        { "mData": "Owner" },
+                                        { "mData": "PortalProcesses" },
+										{ "mData": "ManualJobs"},
+										{ "mData": "Cluster"},
+										{ "mData": "Running"},
+										{ "mData": "Waiting"},
+										{ "mData": function(mdata){return mdata.ClusterUtilization + "%"}}
+
+                                ],
+                                "bPaginate": true,  
+                                "bLengthChange": false,  
+                                "bFilter": true, 
+                                "bSort": true, 
+                                "bInfo": true,
+								"lengthMenu": [[10, 25, 50, -1], [10, 25, 50, "All"]],
+								"order": [[ 6, "desc" ]]
+
+                        });
+
+                }else{
+			       $('#users_table').DataTable().clear();
+        		   $('#users_table').DataTable().rows.add( u[0] ).draw();
+                }
 
 		});
+		//$('#iframe').location.reload();
 
 	}
 	call();
