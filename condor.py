@@ -43,7 +43,7 @@ class Condor():
       for job in range(len(self.jobs)):
 
           process = None
-          process = self.jobs[job]['Args'].split(' ')[0]
+          process = self.jobs[job]['Args'].split(' ')[0] if self.jobs[job].get('Args') else ''
           jobid = self.jobs[job]['GlobalJobId']
           self.info['owner'] = self.jobs[job]['Owner']
 
@@ -63,8 +63,8 @@ class Condor():
     def get_nodes(self, match, *args):
 
         self.default_params = [
-            'UtsnameNodename', 'Name', 'State', 'DetectedMemory',
-            'TotalCpus', 'LoadAvg', 'Activity', 'JobStarts', 'RecentJobStarts']
+            'UtsnameNodename', 'Name', 'State', 'Memory','Disk',
+            'TotalCpus','RemoteOwner', 'LoadAvg', 'Activity', 'JobStarts', 'RecentJobStarts','DiskUsage']
         self.params = self.default_params + args[0]
         self.requirements = str(match).replace(
             "=", "==").replace(',', '&&') if match else None
