@@ -50,11 +50,10 @@ $(document).ready(function () {
                 }else{
 			       $('#users_table').DataTable().clear();
         		   $('#users_table').DataTable().rows.add( u[0] ).draw();
-                }
-
+				}
+				document.getElementById('cluster_load_graph').src += '';
+				document.getElementById('cluster_memory_graph').src += '';
 		});
-		//$('#iframe').location.reload();
-
 	}
 	call();
 	setInterval(call, 5000);

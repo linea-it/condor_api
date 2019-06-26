@@ -43,7 +43,7 @@ class Condor():
       for job in range(len(self.jobs)):
 
           process = None
-          process = self.jobs[job]['Args'].split(' ')[0]
+          process = self.jobs[job]['Args'].split(' ')[0] if self.jobs[job].get('Args') else ''
           jobid = self.jobs[job]['GlobalJobId']
           self.info['owner'] = self.jobs[job]['Owner']
 

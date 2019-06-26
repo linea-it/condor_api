@@ -15,12 +15,12 @@ def index():
     return render_template('index.html')
 
 
-@application.route('/user')
-def user():
+@application.route('/users')
+def users():
 
     condor_m = Condor()
 
-    return render_template('user.html')
+    return render_template('users.html')
 
 
 @application.route('/submit_job', methods=['POST'])
