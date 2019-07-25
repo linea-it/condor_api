@@ -3,9 +3,10 @@ from flask import Flask
 from flask import render_template
 from flask import request
 from flask import jsonify
+from flask_cors import CORS
 
 application = Flask(__name__)
-
+cors = CORS(application, resources={r"/*": {"origins": "*"}})
 
 @application.route('/')
 def index():
@@ -84,7 +85,7 @@ def get_users_stats():
         processes = list()
         portal_jobs = 0
         manual_jobs = 0
-        cluster = 'ICEX'
+        cluster = ''
         user_jobs_running = 0
         user_jobs_idle = 0
         cluster_utilization = 0
@@ -94,6 +95,7 @@ def get_users_stats():
         for j in userjobs:
         
             job  = j['Process'].split('100')
+            cluster = j['ClusterName']
 
             if job[0]:
 
