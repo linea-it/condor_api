@@ -2,8 +2,27 @@ import htcondor
 import classad
 import json
 import urllib
+import os
+import ConfigParser
+import io
 
 class Condor():
+
+    def __init__(self):
+
+        try:
+            with open("config.ini") as f:
+                sample_config = f.read()
+            config = ConfigParser.RawConfigParser(allow_no_value=True)
+            config.readfp(io.BytesIO(sample_config))
+
+            self.cluster_name = config.get('condor', 'cluster_name')
+            self.condor_scheduler = config.get('condor', 'scheduler')
+            self.condor_version = config.get('condor', 'condor_version')
+
+        except Exception as e:
+            raise e
+            raise SystemExit
 
     def get_jobs(self,args,cols):
 
@@ -24,16 +43,22 @@ class Condor():
 
       self.jobs = []
 
-      try:
-          for schedd_ad in htcondor.Collector().locateAll(
-                  htcondor.DaemonTypes.Schedd):
-              self.schedd = htcondor.Schedd(schedd_ad)
-              self.jobs += self.schedd.xquery(projection=self.params,
-                                              requirements=self.requirements)
+      if self.condor_version >= '8.8.1':
 
-      except Exception as e:
+        try:
+            for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
+                    self.schedd = htcondor.Schedd(schedd_ad)
+                    self.jobs += self.schedd.xquery(projection=self.params,
+                                              requirements=self.requirements)
+        except Exception as e:
           print("An exception occurred") + str(e)
           raise e
+
+      else:
+          condor_q = os.popen("condor_q -l")
+          ads = classad.parseOldAds(condor_q)
+          for ad in ads:
+            self.jobs.append(ad)
 
       self.job_procs = {}
       self.info = {}
@@ -43,13 +68,17 @@ class Condor():
       for job in range(len(self.jobs)):
 
           process = None
-          process = self.jobs[job]['Args'].split(' ')[0] if self.jobs[job].get('Args') else ''
+          if 'Args' in self.jobs[job]:
+            process = self.jobs[job]['Args'].split(' ')[0]
+          else:
+            proccess = ' '
           jobid = self.jobs[job]['GlobalJobId']
           self.info['owner'] = self.jobs[job]['Owner']
 
           row = dict({
               'Process': process,
               'Job': jobid,
+              'ClusterName': self.cluster_name
           })
 
           for info in self.jobs[job]:
