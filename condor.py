@@ -3,7 +3,7 @@ import classad
 import json
 import urllib
 import os
-import ConfigParser
+import configparser
 import io
 
 class Condor():
@@ -11,10 +11,8 @@ class Condor():
     def __init__(self):
 
         try:
-            with open("config.ini") as f:
-                sample_config = f.read()
-            config = ConfigParser.RawConfigParser(allow_no_value=True)
-            config.readfp(io.BytesIO(sample_config))
+            config = configparser.ConfigParser()
+            config.read('config.ini')
 
             self.cluster_name = config.get('condor', 'cluster_name')
             self.condor_scheduler = config.get('condor', 'scheduler')
@@ -51,7 +49,7 @@ class Condor():
                     self.jobs += self.schedd.xquery(projection=self.params,
                                               requirements=self.requirements)
         except Exception as e:
-          print("An exception occurred") + str(e)
+          print(str(e))
           raise e
 
       else:
