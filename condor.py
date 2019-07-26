@@ -53,7 +53,7 @@ class Condor():
           raise e
 
       else:
-          condor_q = os.popen("`which condor_q` -l")
+          condor_q = os.popen("condor_q -l")
           ads = classad.parseOldAds(condor_q)
           for ad in ads:
             self.jobs.append(ad)
