@@ -122,7 +122,7 @@ def get_users_stats():
 
               if j['JobStatus'] == "2":
 
-                  if j.has_key('RemoteHost') and j['RemoteHost'] == n['Name']:
+                  if 'RemoteHost' in j and j['RemoteHost'] == n['Name']:
 
                       if j.has_key('RequiresWholeMachine'):
 
