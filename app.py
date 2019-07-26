@@ -44,7 +44,7 @@ def jobs():
 
       args = request.args.to_dict()
       
-      if args.has_key('cols'):
+      if 'cols' in args:
         args.pop('cols')
 
   if request.args.get('cols'):
@@ -124,7 +124,7 @@ def get_users_stats():
 
                   if 'RemoteHost' in j and j['RemoteHost'] == n['Name']:
 
-                      if j.has_key('RequiresWholeMachine'):
+                      if 'RequiresWholeMachine' in j:
 
                           cores += int(round(float(n['TotalCpus'])))
                       else:
