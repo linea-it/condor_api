@@ -74,7 +74,10 @@ class Condor():
             jobid = self.jobs[job]['GlobalJobId']
           else:
             jobid = ' '
-          self.info['owner'] = self.jobs[job]['Owner']
+          if 'Owner' in self.jobs[job]:
+            self.info['owner'] = self.jobs[job]['Owner']
+          else:
+            self.info['owner'] = ' '
 
           row = dict({
               'Process': process,
