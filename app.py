@@ -74,7 +74,7 @@ def get_users_stats():
       if j['Owner'] not in users:
         users.append(j['Owner'])
     else:
-      j['Owner'] == ''
+      j['Owner'] = ' '
 
   for user in users:
 
