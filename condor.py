@@ -69,7 +69,7 @@ class Condor():
           if 'Args' in self.jobs[job]:
             process = self.jobs[job]['Args'].split(' ')[0]
           else:
-            proccess = ' '
+            process = ' '
           if 'GlobalJobId' in self.jobs[job]:
             jobid = self.jobs[job]['GlobalJobId']
           else:
