@@ -70,10 +70,11 @@ def get_users_stats():
 
   for j in jobs:
 
-      if j['Owner'] not in users:
-
+      if 'Owner' in j:
+        if j['Owner'] not in users:
           users.append(j['Owner'])
-
+      else
+        j['Owner'] == ''
 
   for user in users:
 
