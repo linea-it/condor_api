@@ -7,6 +7,7 @@ Click == 7.0
 conda == 4.6.14
 cryptography == 2.6.1
 Flask == 1.0.2
+Flask-Cors==3.0.8
 gunicorn == 19.9.0
 htcondor == 8.9.1
 idna == 2.8
@@ -21,7 +22,6 @@ pycparser == 2.19
 pyOpenSSL == 19.0.0
 PySocks == 1.6.8
 requests == 2.21.0
-ruamel - yaml == 0.15.46
 six == 1.12.0
 urllib3 == 1.24.1
 Werkzeug == 0.15.4
