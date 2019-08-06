@@ -143,8 +143,9 @@ class Condor():
         for job in schedd.xquery(
                 projection=['ClusterId', 'ProcId', 'JobStatus'],
                 requirements='ClusterId==%s' % clusterId):
-            jobs.append(self.parse_job_to_dict(job))
             print(self.parse_job_to_dict(job))
+            jobs.append(self.parse_job_to_dict(job))
+
 
         return dict({
             'success': True,
@@ -158,3 +159,4 @@ class Condor():
             j[key] = str(job.get(key))
 
         return j
+
