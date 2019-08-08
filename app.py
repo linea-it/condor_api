@@ -161,6 +161,31 @@ def nodes():
 
   return response
 
+@application.route('/history', methods=['GET'])
+def history():
+  cols = list()
+  args = dict()
+  limit = 100
+
+  if len(request.args):
+      args = request.args.to_dict()
+     
+  if request.args.get('cols'):
+    cols = request.args.get('cols').split(',')
+    args.pop('cols')
+
+  if request.args.get('limit'):
+    limit = int(request.args.get('limit'))
+    args.pop('limit')
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.get_history(args,cols, limit))
+
+  return response
+
+
 
 if __name__ == '__main__':
   application.run(host='localhost', port=5000, debug=True)
+  # application.run(host='186.232.60.33', port=5001, debug=True)

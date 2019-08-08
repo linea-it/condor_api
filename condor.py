@@ -115,6 +115,39 @@ class Condor():
             self.rows.append(row)
 
         return self.rows
+      
+
+
+
+    def get_history(self, args, cols, limit):
+
+        requirements = self.parse_requirements(args)
+        if requirements is '':
+            requirements = 'true'
+
+        projection = cols
+
+        rows = list()
+
+        print("Requirements: ")
+        print(requirements)
+        print("Projection: ")
+        print(projection)
+                         
+
+        schedd = htcondor.Schedd()
+        for job in schedd.history(
+            requirements,
+            projection,
+            limit):
+            
+            if len(job):
+                rows.append(self.parse_job_to_dict(job))
+
+        print(rows)
+
+        return rows
+
 
     def submit_job(self, params):
         # TODO tratar execessao nesta funcao.
@@ -151,6 +184,17 @@ class Condor():
             'success': True,
             'jobs': jobs
         })
+
+    def parse_requirements(self, args):
+        requirements = ''
+        t = 0
+        for arg in args:
+          requirements += arg + '==' + str(args[arg])
+          if t <= len(args) - 2:
+            requirements += '&&'
+            t = t + 1
+        return requirements
+
 
     def parse_job_to_dict(self, job):
         j = dict()
