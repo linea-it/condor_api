@@ -185,7 +185,39 @@ def history():
   return response
 
 
+@application.route('/remove', methods=['GET'])
+def remove():
+  """
+    Remove job by ClusterId and ProcId
+  """
+  args = request.args.to_dict()
+
+  if 'ClusterId' not in args or 'ProcId' not in args:
+    raise Exception("Parameter ClusterId and ProcId are required")
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.remove_job(args['ClusterId'], args['ProcId']))
+  
+  return response
+
+@application.route('/get_job', methods=['GET'])
+def get_job():
+  """
+    Get job by ClusterId and ProcId
+  """
+  args = request.args.to_dict()
+
+  if 'ClusterId' not in args or 'ProcId' not in args:
+    raise Exception("Parameter ClusterId and ProcId are required")
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.get_job(args['ClusterId'], args['ProcId']))
+  
+  return response
+
 
 if __name__ == '__main__':
-  application.run(host='localhost', port=5000, debug=True)
-  # application.run(host='186.232.60.33', port=5001, debug=True)
+  #application.run(host='localhost', port=5000, debug=True)
+  application.run(host='186.232.60.33', port=5001, debug=True)

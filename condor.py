@@ -185,6 +185,54 @@ class Condor():
             'jobs': jobs
         })
 
+    def remove_job(self, clusterId, procId):
+        print("Removing Job ClusterId: [%s] ProcId: [%s]" % (clusterId, procId))
+
+        schedd = htcondor.Schedd()
+
+        try:
+            schedd.act(htcondor.JobAction.Remove, 'ClusterId==%s && ProcId==%s' % (clusterId, procId))
+
+
+            job = self.get_job(clusterId, procId, ["ClusterId", "ProcId", "JobStatus"])
+
+            return dict({
+                'success': True,
+                'job': job
+            })
+        except:
+            return dict({
+                'success': False
+            })
+
+    def get_job(self, clusterId, procId, projection=[]):
+
+        schedd = htcondor.Schedd()
+
+        requirements = 'ClusterId==%s && ProcId==%s' % (clusterId, procId)
+
+        jobs = list()
+        for job in schedd.xquery(requirements=requirements, projection=projection):
+            jobs.append(self.parse_job_to_dict(job))
+
+        if len(jobs) == 0:
+            # Tenta recuperar o job do historico
+            for job in schedd.history(
+                requirements,
+                projection,
+                1):
+
+                if len(job) > 0:
+                    return self.parse_job_to_dict(job)
+                else:
+                    return None
+
+        elif len(jobs) == 1:
+            return jobs[0]
+        else:
+            return jobs
+
+
     def parse_requirements(self, args):
         requirements = ''
         t = 0
