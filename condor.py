@@ -5,6 +5,10 @@ import urllib
 import os
 import configparser
 import io
+import time
+import datetime
+from database import *
+from utils import Utils
 
 class Condor():
 
@@ -51,7 +55,6 @@ class Condor():
         except Exception as e:
           print(str(e))
           raise e
-
       else:
           condor_q = os.popen("condor_q -l -global")
           ads = classad.parseOldAds(condor_q)
@@ -118,22 +121,24 @@ class Condor():
       
 
 
-
     def get_history(self, args, cols, limit):
 
-        requirements = self.parse_requirements(args)
-        if requirements is '':
-            requirements = 'true'
+        requirements = Utils.parse_requirements(args)
 
-        projection = cols
+        if requirements is '':
+            requirements = 'JobFinishedHookDone=!=""'
+
+        if cols:
+            projection = cols
+        else:
+            projection = ['Args', 'ClusterId','ProcId','QDate', \
+                        'JobStartDate','CompletionDate','JobFinishedHookDone', \
+                        'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
+                        'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
+        if limit is '':
+            limit = False
 
         rows = list()
-
-        print("Requirements: ")
-        print(requirements)
-        print("Projection: ")
-        print(projection)
-                         
 
         schedd = htcondor.Schedd()
         for job in schedd.history(
@@ -143,8 +148,6 @@ class Condor():
             
             if len(job):
                 rows.append(self.parse_job_to_dict(job))
-
-        print(rows)
 
         return rows
 
@@ -232,23 +235,104 @@ class Condor():
         else:
             return jobs
 
-
-    def parse_requirements(self, args):
-        requirements = ''
-        t = 0
-        for arg in args:
-          requirements += arg + '==' + str(args[arg])
-          if t <= len(args) - 2:
-            requirements += '&&'
-            t = t + 1
-        return requirements
-
-
     def parse_job_to_dict(self, job):
         j = dict()
 
         for key in job.keys():
             j[key] = str(job.get(key))
+        try:
+            j['JobId'] = j['ClusterId'] + '.' + j['ProcId']
+        except:
+            j['JobId'] = None
 
+        j['Args'] = j['Args'] if ('Args' in j) else None
+        j['ClusterName'] = self.cluster_name
+        j['GlobalJobId'] = j['GlobalJobId'] if ('GlobalJobId' in j) else None
+        try:
+           date = j['JobStartDate']
+           j['JobStartDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass        
+        try:
+           date = j['QDate']
+           j['QDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+        try:
+           date = j['CompletionDate']
+           if date:
+            j['CompletionDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+        try:
+           date = j['JobFinishedHookDone']
+           j['JobFinishedHookDone'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+        j['JobStatus'] = j['JobStatus'] if ('JobStatus' in j) else None
+        j['Out'] = j['Out'] if ('Out' in j) else None
+        j['Owner'] = j['Owner'] if ('Owner' in j) else None
+        j['Process'] = j['Process'] if ('Process' in j) else None
+        j['ServerTime'] = j['ServerTime'] if ('ServerTime' in j) else None
+        j['UserLog'] = j['UserLog'] if ('UserLog' in j) else None
+        j['RequiresWholeMachine'] = j['RequiresWholeMachine'] if ('RequiresWholeMachine' in j) else None
+        j['LastRemoteHost'] = j['LastRemoteHost'] if ('LastRemoteHost' in j) else None
         return j
 
+    def job_history(self, args,cols,limit,offset):
+
+        if not cols:
+            cols = '*'
+        else:
+            cols = ','.join(map(str, cols)) 
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements(**args)
+
+        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ')
+
+        sql = ''
+
+        if requirements:
+
+            sql = 'select {} from condor_history where {} ORDER BY JobFinishedHookDone desc'.format(cols,requirements_sql,limit,offset)
+    
+        else:
+            sql = 'select {} from condor_history ORDER BY JobFinishedHookDone desc'.format(cols,limit,offset)
+
+        if limit:
+            sql += ' limit {}'.format(limit)
+
+        if limit and offset:
+            sql += ' offset {}'.format(offset)
+
+        cur = get_db().cursor()
+        query = query_dict(sql)
+
+        return query
+
+    def update_db(self):
+        print ("Updating database")
+        cols = list()
+        limit = ''
+        days_ago = datetime.datetime.now() - datetime.timedelta(days=30)
+        args = {'JobFinishedHookDone__gt': str(days_ago.timestamp())}
+
+        jobs = self.get_history(args,cols,limit)
+        cur = get_db().cursor()
+
+        for job in jobs:
+            djob = self.parse_job_to_dict(job)
+
+            query_insert('INSERT OR REPLACE INTO condor_history (JobId,Args,ClusterName,GlobalJobId,\
+            Job,QDate,JobStartDate,CompletionDate,JobFinishedHookDone,\
+            JobStatus,Out,Owner,Process,RequestCpus,ServerTime,UserLog, \
+            RequiresWholeMachine,LastRemoteHost) \
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
+            (djob['JobId'],djob['Args'], \
+            djob['ClusterName'],djob['GlobalJobId'],djob['JobId'],djob['QDate'], \
+            djob['QDate'],djob['CompletionDate'], djob['JobFinishedHookDone'], \
+            djob['JobStatus'],djob['Out'],djob['Owner'],djob['Process'],djob['RequestCpus'], \
+            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost']))
+
+        print ("Done")

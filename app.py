@@ -4,7 +4,9 @@ from flask import render_template
 from flask import request
 from flask import jsonify
 from flask_cors import CORS
-
+import threading
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
 application = Flask(__name__)
 cors = CORS(application, resources={r"/*": {"origins": "*"}})
 
@@ -165,7 +167,8 @@ def nodes():
 def history():
   cols = list()
   args = dict()
-  limit = 100
+  limit = False
+  offset = False
 
   if len(request.args):
       args = request.args.to_dict()
@@ -177,10 +180,14 @@ def history():
   if request.args.get('limit'):
     limit = int(request.args.get('limit'))
     args.pop('limit')
+  
+  if request.args.get('offset'):
+    offset = int(request.args.get('offset'))
+    args.pop('offset')
 
   condor_m = Condor()
 
-  response = jsonify(condor_m.get_history(args,cols, limit))
+  response = jsonify(condor_m.job_history(args,cols,limit,offset))
 
   return response
 
@@ -217,7 +224,50 @@ def get_job():
   
   return response
 
+@application.route('/test_endpoint', methods=['GET'])
+def test_endpoint():
+  cols = list()
+  args = dict()
+  limit = 100
 
+  if len(request.args):
+      args = request.args.to_dict()
+     
+  if request.args.get('cols'):
+    cols = request.args.get('cols').split(',')
+    args.pop('cols')
+
+  if request.args.get('limit'):
+    limit = int(request.args.get('limit'))
+    args.pop('limit')
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.parse_requirements(args))
+
+  return response
+
+# @application.route('/update_db', methods=['GET'])
+# def update_db():
+
+#   condor_m = Condor()
+
+#   response = jsonify(condor_m.update_db())
+
+#   return response
+
+def update_db():
+  
+    with application.app_context():
+        condor_m = Condor()
+        condor_m.update_db()
+        
 if __name__ == '__main__':
+  scheduler = BackgroundScheduler()
+  scheduler.add_job(update_db, 'interval', minutes=5,max_instances=1)
+  scheduler.start()
+
   #application.run(host='localhost', port=5000, debug=True)
   application.run(host='186.232.60.33', port=5001, debug=True)
+
+
