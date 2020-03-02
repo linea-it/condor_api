@@ -1,8 +1,9 @@
 class Utils():
 
-    def parse_requirements(self,**args):
-        
+    def parse_requirements(self, search_fields, **args):
+
         requirements = []
+        search = []
 
         for arg in args:
 
@@ -10,7 +11,7 @@ class Utils():
 
                 requirement = arg.split('__')[0]
                 condition = arg.split('__')[1]
-                value = args[arg]    
+                value = args[arg]
 
                 if requirement and condition:
                     if condition in 'eq':
@@ -28,9 +29,21 @@ class Utils():
                             requirements.append(requirement + ' ' + 'BETWEEN' + ' ' + self.parse_value(value.split(',')[0]) + ' ' + 'AND' + ' ' + self.parse_value(value.split(',')[1]) )
                     elif condition in 'contains':
                         requirements.append(requirement + ' ' + 'like' + ' ' + '"' + '%' + eval(self.parse_value(value)) + '%' + '"')
-                        
-        response = '&'.join(str(e) for e in requirements)
-        print (response)
+
+            if(arg == 'search'):
+                if(args[arg] is not ''):
+                    for field in search_fields:
+                        search.append(field + ' like "%' + args[arg] + '%"')
+
+        response = ''
+
+        if(len(search) != 0 and len(requirements) != 0):
+            response = '|'.join(str(e) for e in search) + '&' + '&'.join(str(e) for e in requirements)
+        elif(len(search) != 0):
+            response = '|'.join(str(e) for e in search)
+        elif(len(requirements) != 0):
+            response = '&'.join(str(e) for e in requirements)
+
         return response
 
     def parse_value(self,value):

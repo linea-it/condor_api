@@ -118,7 +118,7 @@ class Condor():
             self.rows.append(row)
 
         return self.rows
-      
+
 
 
     def get_history(self, args, cols, limit):
@@ -145,7 +145,7 @@ class Condor():
             requirements,
             projection,
             limit):
-            
+
             if len(job):
                 rows.append(self.parse_job_to_dict(job))
 
@@ -252,7 +252,7 @@ class Condor():
            date = j['JobStartDate']
            j['JobStartDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
         except:
-            pass        
+            pass
         try:
            date = j['QDate']
            j['QDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
@@ -279,26 +279,27 @@ class Condor():
         j['LastRemoteHost'] = j['LastRemoteHost'] if ('LastRemoteHost' in j) else None
         return j
 
-    def job_history(self, args,cols,limit,offset):
+    def job_history(self,args,cols,limit,offset):
+
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
 
         if not cols:
             cols = '*'
         else:
-            cols = ','.join(map(str, cols)) 
+            cols = ','.join(map(str, cols))
 
         Parser = Utils()
-        requirements = Parser.parse_requirements(**args)
+        requirements = Parser.parse_requirements(search_fields, **args)
 
-        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ')
+        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ').replace('|', ' ' + 'OR' + ' ')
 
         sql = ''
 
         if requirements:
+            sql = 'select {} from condor_history where {} ORDER BY JobFinishedHookDone desc'.format(cols,requirements_sql)
 
-            sql = 'select {} from condor_history where {} ORDER BY JobFinishedHookDone desc'.format(cols,requirements_sql,limit,offset)
-    
         else:
-            sql = 'select {} from condor_history ORDER BY JobFinishedHookDone desc'.format(cols,limit,offset)
+            sql = 'select {} from condor_history ORDER BY JobFinishedHookDone desc'.format(cols)
 
         if limit:
             sql += ' limit {}'.format(limit)
