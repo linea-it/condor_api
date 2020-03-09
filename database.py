@@ -14,6 +14,14 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+def query_one(query, args=(), one=False):
+    cur = get_db().execute(query, args)
+    rv = cur.fetchone()
+    cur.close()
+
+    res = list(rv.values())
+    return (res[0] if res else None)
+
 def query_db(query, args=(), one=False):
     cur = get_db().execute(query, args)
     rv = cur.fetchall()

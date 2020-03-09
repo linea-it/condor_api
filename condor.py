@@ -307,8 +307,13 @@ class Condor():
         if limit and offset:
             sql += ' offset {}'.format(offset)
 
+        sql_count = 'select count(*) from condor_history'
+
         cur = get_db().cursor()
-        query = query_dict(sql)
+        query = dict({
+            "data": query_dict(sql),
+            "total_count": query_one(sql_count),
+        })
 
         return query
 
