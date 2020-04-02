@@ -45,7 +45,7 @@ def jobs():
   if len(request.args):
 
       args = request.args.to_dict()
-      
+
       if 'cols' in args:
         args.pop('cols')
 
@@ -59,7 +59,7 @@ def jobs():
 
   return response
 
-  
+
 @application.route('/users_stats', methods=['GET'])
 def get_users_stats():
 
@@ -97,7 +97,7 @@ def get_users_stats():
       userslots = list()
 
       for j in userjobs:
-      
+
           job  = j['Process'].split('100')
           cluster = j['ClusterName']
 
@@ -106,9 +106,9 @@ def get_users_stats():
               manual_jobs += 1
 
           else:
-              
+
               portal_jobs += 1
-              
+
               if j['Process'] not in processes:
 
                   processes.append(j['Process'])
@@ -120,7 +120,7 @@ def get_users_stats():
           if j['JobStatus'] == "2":
 
               user_jobs_running += 1
-              
+
           for n in nodes:
 
               if j['JobStatus'] == "2":
@@ -135,17 +135,17 @@ def get_users_stats():
 
       div = total_nodes / 100
       total = div * cores / 100
-      
-      rows.append({'Owner': owner, 'PortalProcesses': len(processes), 
-      'ManualJobs': manual_jobs, 
-      'Cluster': cluster, 
+
+      rows.append({'Owner': owner, 'PortalProcesses': len(processes),
+      'ManualJobs': manual_jobs,
+      'Cluster': cluster,
       'Waiting': user_jobs_idle,
       'Running': user_jobs_running,'ClusterUtilization': total})
 
 
   return jsonify(rows)
-  
-  
+
+
 @application.route('/nodes', methods=['GET'])
 def nodes():
 
@@ -172,15 +172,19 @@ def history():
 
   if len(request.args):
       args = request.args.to_dict()
-     
+
   if request.args.get('cols'):
     cols = request.args.get('cols').split(',')
     args.pop('cols')
 
+  # if request.args.get('search'):
+  #   search = request.args.get('search')
+  #   args.pop('search')
+
   if request.args.get('limit'):
     limit = int(request.args.get('limit'))
     args.pop('limit')
-  
+
   if request.args.get('offset'):
     offset = int(request.args.get('offset'))
     args.pop('offset')
@@ -205,7 +209,7 @@ def remove():
   condor_m = Condor()
 
   response = jsonify(condor_m.remove_job(args['ClusterId'], args['ProcId']))
-  
+
   return response
 
 @application.route('/get_job', methods=['GET'])
@@ -221,7 +225,30 @@ def get_job():
   condor_m = Condor()
 
   response = jsonify(condor_m.get_job(args['ClusterId'], args['ProcId']))
-  
+
+  return response
+
+@application.route('/top_users', methods=['GET'])
+def get_top_users():
+  """
+    Get cluter's top users:
+  """
+  cols = list()
+  args = dict()
+  limit = False
+  offset = False
+
+  if len(request.args):
+      args = request.args.to_dict()
+
+  if request.args.get('limit'):
+    limit = int(request.args.get('limit'))
+    args.pop('limit')
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.top_users_history(args, limit))
+
   return response
 
 @application.route('/test_endpoint', methods=['GET'])
@@ -232,7 +259,7 @@ def test_endpoint():
 
   if len(request.args):
       args = request.args.to_dict()
-     
+
   if request.args.get('cols'):
     cols = request.args.get('cols').split(',')
     args.pop('cols')
@@ -257,17 +284,17 @@ def test_endpoint():
 #   return response
 
 def update_db():
-  
+
     with application.app_context():
         condor_m = Condor()
         condor_m.update_db()
-        
+
 if __name__ == '__main__':
   scheduler = BackgroundScheduler()
   scheduler.add_job(update_db, 'interval', minutes=5,max_instances=1)
   scheduler.start()
 
   #application.run(host='localhost', port=5000, debug=True)
-  application.run(host='186.232.60.33', port=5001, debug=True)
+  application.run(host='186.232.60.33', port=5153, debug=True)
 
 

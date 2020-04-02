@@ -122,8 +122,10 @@ class Condor():
 
 
     def get_history(self, args, cols, limit):
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
 
-        requirements = Utils.parse_requirements(args)
+        Parser = Utils()
+        requirements = Parser.parse_requirements(search_fields, **args)
 
         if requirements is '':
             requirements = 'JobFinishedHookDone=!=""'
@@ -145,6 +147,8 @@ class Condor():
             requirements,
             projection,
             limit):
+
+            print()
 
             if len(job):
                 rows.append(self.parse_job_to_dict(job))
@@ -317,6 +321,60 @@ class Condor():
 
         return query
 
+
+    def update_execution_time(self):
+
+        try:
+
+            jobs = self.job_history({}, None, None, None)
+
+            for job in jobs['data']:
+
+                djob = dict(job)
+
+                start_date = datetime.datetime.strptime(djob['JobStartDate'], '%Y-%m-%d %H:%M:%S')
+                end_date = datetime.datetime.strptime(djob['JobFinishedHookDone'], '%Y-%m-%d %H:%M:%S')
+
+                execution_time = end_date - start_date
+
+                print('Execution time [%s]: %s' % (type(execution_time), execution_time))
+
+                execution_time = execution_time.total_seconds()
+
+                if djob['JobID']:
+                    query_insert('UPDATE condor_history SET ExecutionTime = %f WHERE JobId = %f' % (execution_time, djob['JobID']))
+        except:
+            query_insert('ALTER TABLE condor_history ADD ExecutionTime REAL')
+            self.update_execution_time()
+
+        return 'Done'
+
+
+    def top_users_history(self, args, limit):
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements([], **args)
+
+        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ').replace('|', ' ' + 'OR' + ' ')
+
+        sql = ''
+
+        if requirements:
+            sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history WHERE {} GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'.format(requirements_sql)
+        else:
+           sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'
+
+        if limit:
+            sql += ' limit {}'.format(limit)
+
+
+        # Descomente a linha abaixo na primeira vez que ligar e for chamar o endpoint "top_users".
+        # Irá, reatroativamente, preencher todas as colunas execution time de jobs passados.
+        # self.update_execution_time()
+
+        return query_dict(sql)
+
+
     def update_db(self):
         print ("Updating database")
         cols = list()
@@ -330,15 +388,22 @@ class Condor():
         for job in jobs:
             djob = self.parse_job_to_dict(job)
 
+            start_date = datetime.datetime.strptime(djob['QDate'], '%Y-%m-%d %H:%M:%S')
+            end_date = datetime.datetime.strptime(djob['JobFinishedHookDone'], '%Y-%m-%d %H:%M:%S')
+
+            execution_time = end_date - start_date
+
+            execution_time = execution_time.total_seconds()
+
             query_insert('INSERT OR REPLACE INTO condor_history (JobId,Args,ClusterName,GlobalJobId,\
             Job,QDate,JobStartDate,CompletionDate,JobFinishedHookDone,\
             JobStatus,Out,Owner,Process,RequestCpus,ServerTime,UserLog, \
-            RequiresWholeMachine,LastRemoteHost) \
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
+            RequiresWholeMachine,LastRemoteHost,ExecutionTime) \
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
             (djob['JobId'],djob['Args'], \
             djob['ClusterName'],djob['GlobalJobId'],djob['JobId'],djob['QDate'], \
             djob['QDate'],djob['CompletionDate'], djob['JobFinishedHookDone'], \
             djob['JobStatus'],djob['Out'],djob['Owner'],djob['Process'],djob['RequestCpus'], \
-            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost']))
+            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost'],execution_time))
 
-        print ("Done")
+        print("Done")
