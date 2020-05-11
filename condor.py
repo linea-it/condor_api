@@ -300,10 +300,22 @@ class Condor():
         sql = ''
 
         if requirements:
-            sql = 'select {} from condor_history where {} ORDER BY JobFinishedHookDone desc'.format(cols,requirements_sql)
+            sql = 'select {} from condor_history where {}'.format(cols,requirements_sql)
 
         else:
-            sql = 'select {} from condor_history ORDER BY JobFinishedHookDone desc'.format(cols)
+            sql = 'select {} from condor_history'.format(cols)
+
+        if(args['ordering']):
+            if(args['ordering'][0] == '-'):
+
+                sql = sql + ' ORDER BY "' + args['ordering'][1:] + '" DESC'
+            else:
+                sql = sql + ' ORDER BY "%' + args['ordering'] + '%" ASC'
+        else:
+            sql = sql + ' ORDER BY JobFinishedHookDone DESC'
+
+        print('sql', sql)
+
 
         if limit:
             sql += ' limit {}'.format(limit)
