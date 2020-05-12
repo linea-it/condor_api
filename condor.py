@@ -305,7 +305,8 @@ class Condor():
         else:
             sql = 'select {} from condor_history'.format(cols)
 
-        if(args['ordering']):
+
+        if('ordering' in args):
             if(args['ordering'][0] == '-'):
 
                 sql = sql + ' ORDER BY "' + args['ordering'][1:] + '" DESC'
@@ -313,8 +314,6 @@ class Condor():
                 sql = sql + ' ORDER BY "%' + args['ordering'] + '%" ASC'
         else:
             sql = sql + ' ORDER BY JobFinishedHookDone DESC'
-
-        print('sql', sql)
 
 
         if limit:
