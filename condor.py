@@ -7,20 +7,22 @@ import configparser
 import io
 import time
 import datetime
+import subprocess
 from database import *
 from utils import Utils
+#teste
 
 class Condor():
 
     def __init__(self):
 
         try:
-            config = configparser.ConfigParser()
-            config.read('config.ini')
+            self.config = configparser.ConfigParser()
+            self.config.read('config.ini')
 
-            self.cluster_name = config.get('condor', 'cluster_name')
-            self.condor_scheduler = config.get('condor', 'scheduler')
-            self.condor_version = config.get('condor', 'condor_version')
+            self.cluster_name = self.config.get('condor', 'cluster_name')
+            self.condor_scheduler = self.config.get('condor', 'scheduler')
+            self.condor_version = self.config.get('condor', 'condor_version')
 
         except Exception as e:
             raise e
@@ -154,6 +156,121 @@ class Condor():
                 rows.append(self.parse_job_to_dict(job))
 
         return rows
+
+    def get_old_history(self, args, cols, limit):
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements(search_fields, **args)
+
+        if requirements is '':
+            requirements = 'JobFinishedHookDone=!=""'
+
+        if cols:
+            projection = cols
+        else:
+            projection = ['Args', 'ClusterId','ProcId','QDate', \
+                        'JobStartDate','CompletionDate','JobFinishedHookDone', \
+                        'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
+                        'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
+        if limit is '':
+            limit = False
+
+        rows = list()
+
+        command = 'condor_history -l -constraint \'({})\''.format(requirements)
+
+        p = subprocess.Popen(command,shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+
+        condor_history, err = p.communicate()
+
+        ads = classad.parseOldAds(condor_history)
+
+        for ad in ads:
+            rows.append(ad)
+
+        print (rows)
+
+        return rows
+
+    def get_remote_history(self, args, cols, limit):
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements(search_fields, **args)
+
+        if cols:
+            projection = cols
+        else:
+            projection = ['Args', 'ClusterId','ProcId','QDate', \
+                        'JobStartDate','CompletionDate','JobFinishedHookDone', \
+                        'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
+                        'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
+        if limit is '':
+            limit = False
+
+        rows = list()
+
+        for submitter in self.config.sections():
+
+            if submitter != 'condor' and self.config[submitter]['Remote'] == 'Yes' :
+
+                scheduler = self.config[submitter]['Scheduler']
+                user = self.config[submitter]['user']
+                key = self.config[submitter]['Key']
+                port = self.config[submitter]['Port']
+
+                command = 'ssh {} -p {} -l {} -i {} \"condor_history -l -constraint \'({})\'\"'.format(scheduler,port,user,key,requirements)
+                #command = 'ssh {} -p {} -l {} -i {} \"condor_history -l -match 100"'.format(scheduler,port,user,key,requirements)
+
+                p = subprocess.Popen(command,shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+
+                condor_history, err = p.communicate()
+
+                ads = classad.parseOldAds(condor_history)
+
+                for ad in ads:
+                    rows.append(ad)
+
+        return rows
+
+
+    def get_cluster_history(self, args, cols, limit):
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements(search_fields, **args)
+
+        if cols:
+            projection = cols
+        else:
+            projection = ['Args', 'ClusterId','ProcId','QDate', \
+                        'JobStartDate','CompletionDate','JobFinishedHookDone', \
+                        'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
+                        'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
+        if limit is '':
+            limit = False
+
+        rows = list()
+        
+        if self.condor_version >= '8.8.1':
+
+            history = self.get_history(args,cols,limit)
+        else:
+            history = self.get_old_history(args,cols,limit)
+
+        for job in history:
+
+            rows.append(job)
+        
+        remote_history = self.get_remote_history(args,cols,limit)
+
+        for job in remote_history:
+
+            rows.append(job)
+
+        return rows
+
 
 
     def submit_job(self, params):
@@ -390,10 +507,10 @@ class Condor():
         print ("Updating database")
         cols = list()
         limit = ''
-        days_ago = datetime.datetime.now() - datetime.timedelta(days=30)
+        days_ago = datetime.datetime.now() - datetime.timedelta(days=10)
         args = {'JobFinishedHookDone__gt': str(days_ago.timestamp())}
 
-        jobs = self.get_history(args,cols,limit)
+        jobs = self.get_cluster_history(args,cols,limit)
         cur = get_db().cursor()
 
         for job in jobs:

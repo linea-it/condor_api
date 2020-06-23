@@ -169,7 +169,7 @@ def history():
   args = dict()
   limit = False
   offset = False
-
+  
   if len(request.args):
       args = request.args.to_dict()
 
@@ -192,6 +192,38 @@ def history():
   condor_m = Condor()
 
   response = jsonify(condor_m.job_history(args,cols,limit,offset))
+
+  return response
+
+@application.route('/old_history', methods=['GET'])
+def old_history():
+  cols = list()
+  args = dict()
+  limit = False
+  offset = False
+
+  if len(request.args):
+      args = request.args.to_dict()
+
+  if request.args.get('cols'):
+    cols = request.args.get('cols').split(',')
+    args.pop('cols')
+
+  # if request.args.get('search'):
+  #   search = request.args.get('search')
+  #   args.pop('search')
+
+  if request.args.get('limit'):
+    limit = int(request.args.get('limit'))
+    args.pop('limit')
+
+  if request.args.get('offset'):
+    offset = int(request.args.get('offset'))
+    args.pop('offset')
+
+  condor_m = Condor()
+
+  response = jsonify(condor_m.get_cluster_history(args,cols,limit))
 
   return response
 
@@ -291,10 +323,14 @@ def update_db():
 
 if __name__ == '__main__':
   scheduler = BackgroundScheduler()
-  scheduler.add_job(update_db, 'interval', minutes=5,max_instances=1)
+  if scheduler.get_jobs():
+    print ("Job ainda rodando")
+  else:
+    scheduler.add_job(update_db, 'interval', minutes=10,max_instances=1)
+  
   scheduler.start()
 
   #application.run(host='localhost', port=5000, debug=True)
-  application.run(host='186.232.60.33', port=5153, debug=True)
+  application.run(host='186.232.60.37', port=5153, debug=True)
 
 
