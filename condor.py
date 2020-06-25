@@ -30,12 +30,16 @@ class Condor():
 
     def get_jobs(self,args,cols):
 
-      self.default_params = ['Args', 'GlobalJobId','JobStartDate','JobStatus','Out','Owner','RemoteHost','RequestCpus','RequiresWholeMachine', 'UserLog']
+      self.default_params = [
+        'Cmd', 'Args', 'ClusterId', 'GlobalJobId', 'Job', 'JobStartDate',
+        'JobStatus', 'Out', 'Owner', 'RemoteHost', 'RequestCpus',
+        'RequiresWholeMachine', 'UserLog'
+      ]
+
       self.params = self.default_params + str(cols).split(',')
       self.requirements = ''
 
       if len(args):
-
         t = 0
         for arg in args:
           self.requirements += arg + '==' + str(args[arg])
@@ -69,29 +73,22 @@ class Condor():
       rows = list()
 
       for job in range(len(self.jobs)):
+          process = self.jobs[job].get('Args', '').split(' ').pop()
+          jobid = self.jobs[job].get('GlobalJobId', '')
+          self.info['owner'] = self.jobs[job].get('Owner', '')
 
-          process = None
-          if 'Args' in self.jobs[job]:
-            process = self.jobs[job]['Args'].split(' ')[0]
-          else:
-            process = ' '
-          if 'GlobalJobId' in self.jobs[job]:
-            jobid = self.jobs[job]['GlobalJobId']
-          else:
-            jobid = ' '
-          if 'Owner' in self.jobs[job]:
-            self.info['owner'] = self.jobs[job]['Owner']
-          else:
-            self.info['owner'] = ' '
+          portal = None
+          if self.jobs[job].get('Cmd', '').find('pypeline/bin/run.py') > -1:
+              portal = self.jobs[job].get('Owner', '')
 
           row = dict({
               'Process': process,
               'Job': jobid,
+              'Portal': portal,
               'ClusterName': self.cluster_name
           })
 
           for info in self.jobs[job]:
-
               row[info] = str(self.jobs[job][info])
 
           rows.append(row)
@@ -122,7 +119,6 @@ class Condor():
         return self.rows
 
 
-
     def get_history(self, args, cols, limit):
         search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
 
@@ -135,7 +131,7 @@ class Condor():
         if cols:
             projection = cols
         else:
-            projection = ['Args', 'ClusterId','ProcId','QDate', \
+            projection = ['Cmd', 'Args', 'ClusterId','ProcId','QDate', \
                         'JobStartDate','CompletionDate','JobFinishedHookDone', \
                         'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
                         'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
@@ -149,8 +145,6 @@ class Condor():
             requirements,
             projection,
             limit):
-
-            print()
 
             if len(job):
                 rows.append(self.parse_job_to_dict(job))
@@ -169,7 +163,7 @@ class Condor():
         if cols:
             projection = cols
         else:
-            projection = ['Args', 'ClusterId','ProcId','QDate', \
+            projection = ['Cmd', 'Args', 'ClusterId','ProcId','QDate', \
                         'JobStartDate','CompletionDate','JobFinishedHookDone', \
                         'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
                         'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
@@ -202,7 +196,7 @@ class Condor():
         if cols:
             projection = cols
         else:
-            projection = ['Args', 'ClusterId','ProcId','QDate', \
+            projection = ['Cmd', 'Args', 'ClusterId','ProcId','QDate', \
                         'JobStartDate','CompletionDate','JobFinishedHookDone', \
                         'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
                         'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
@@ -244,7 +238,7 @@ class Condor():
         if cols:
             projection = cols
         else:
-            projection = ['Args', 'ClusterId','ProcId','QDate', \
+            projection = ['Cmd', 'Args', 'ClusterId','ProcId','QDate', \
                         'JobStartDate','CompletionDate','JobFinishedHookDone', \
                         'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
                         'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
@@ -252,25 +246,21 @@ class Condor():
             limit = False
 
         rows = list()
-        
-        if self.condor_version >= '8.8.1':
 
+        if self.condor_version >= '8.8.1':
             history = self.get_history(args,cols,limit)
         else:
             history = self.get_old_history(args,cols,limit)
 
         for job in history:
-
             rows.append(job)
-        
+
         remote_history = self.get_remote_history(args,cols,limit)
 
         for job in remote_history:
-
             rows.append(job)
 
         return rows
-
 
 
     def submit_job(self, params):
@@ -366,6 +356,13 @@ class Condor():
         except:
             j['JobId'] = None
 
+        parent_id = None
+
+        if j['JobId'] and j['JobId'].find('.0') < 0:
+            parent_id = j['ClusterId']
+
+        j['ParentId'] = parent_id
+
         j['Args'] = j['Args'] if ('Args' in j) else None
         j['ClusterName'] = self.cluster_name
         j['GlobalJobId'] = j['GlobalJobId'] if ('GlobalJobId' in j) else None
@@ -398,6 +395,11 @@ class Condor():
         j['UserLog'] = j['UserLog'] if ('UserLog' in j) else None
         j['RequiresWholeMachine'] = j['RequiresWholeMachine'] if ('RequiresWholeMachine' in j) else None
         j['LastRemoteHost'] = j['LastRemoteHost'] if ('LastRemoteHost' in j) else None
+
+        j['Portal'] = None
+        if j['Cmd'] and j['Cmd'].find('pypeline/bin/run.py') > -1:
+            j['Portal'] = j['Owner']
+
         return j
 
     def job_history(self,args,cols,limit,offset):
@@ -418,10 +420,10 @@ class Condor():
 
         if requirements:
             sql = 'select {} from condor_history where {}'.format(cols,requirements_sql)
-
+            sql_count = 'select count(*) from condor_history where {}'.format(requirements_sql)
         else:
             sql = 'select {} from condor_history'.format(cols)
-
+            sql_count = 'select count(*) from condor_history'
 
         if('ordering' in args):
             if(args['ordering'][0] == '-'):
@@ -439,7 +441,6 @@ class Condor():
         if limit and offset:
             sql += ' offset {}'.format(offset)
 
-        sql_count = 'select count(*) from condor_history'
 
         cur = get_db().cursor()
         query = dict({
@@ -448,6 +449,45 @@ class Condor():
         })
 
         return query
+
+
+    def job_parent_history(self, args, cols, limit, offset):
+
+        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
+
+        if not cols:
+            cols = '*'
+        else:
+            cols = ','.join(map(str, cols))
+
+        Parser = Utils()
+        requirements = Parser.parse_requirements(search_fields, **args)
+
+        if requirements:
+            requirements = "AND {}".format(requirements.replace('&', ' AND ').replace('|', ' OR '))
+
+        sql = 'select {} from condor_history where ParentId is null {}'.format(cols, requirements)
+
+        if('ordering' in args):
+            if(args['ordering'][0] == '-'):
+                sql = sql + ' ORDER BY "' + args['ordering'][1:] + '" DESC'
+            else:
+                sql = sql + ' ORDER BY "%' + args['ordering'] + '%" ASC'
+        else:
+            sql = sql + ' ORDER BY JobFinishedHookDone DESC'
+
+        if limit:
+            sql += ' limit {}'.format(limit)
+
+        if limit and offset:
+            sql += ' offset {}'.format(offset)
+
+        sql_count = 'select count(*) from condor_history where ParentId is null {}'.format(requirements)
+
+        return dict({
+            "data": query_dict(sql),
+            "total_count": query_one(sql_count),
+        })
 
 
     def update_execution_time(self):
@@ -497,7 +537,7 @@ class Condor():
 
 
         # Descomente a linha abaixo na primeira vez que ligar e for chamar o endpoint "top_users".
-        # Irá, reatroativamente, preencher todas as colunas execution time de jobs passados.
+        # Ira, reatroativamente, preencher todas as colunas execution time de jobs passados.
         # self.update_execution_time()
 
         return query_dict(sql)
@@ -523,15 +563,15 @@ class Condor():
 
             execution_time = execution_time.total_seconds()
 
-            query_insert('INSERT OR REPLACE INTO condor_history (JobId,Args,ClusterName,GlobalJobId,\
+            query_insert('INSERT OR REPLACE INTO condor_history (JobId, Args, ClusterId, ClusterName, ParentId, GlobalJobId,\
             Job,QDate,JobStartDate,CompletionDate,JobFinishedHookDone,\
             JobStatus,Out,Owner,Process,RequestCpus,ServerTime,UserLog, \
-            RequiresWholeMachine,LastRemoteHost,ExecutionTime) \
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
-            (djob['JobId'],djob['Args'], \
-            djob['ClusterName'],djob['GlobalJobId'],djob['JobId'],djob['QDate'], \
+            RequiresWholeMachine,LastRemoteHost,ExecutionTime, Portal) \
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
+            (djob['JobId'],djob['Args'], djob['ClusterId'], \
+            djob['ClusterName'], djob['ParentId'], djob['GlobalJobId'],djob['JobId'],djob['QDate'], \
             djob['QDate'],djob['CompletionDate'], djob['JobFinishedHookDone'], \
             djob['JobStatus'],djob['Out'],djob['Owner'],djob['Process'],djob['RequestCpus'], \
-            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost'],execution_time))
+            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost'], execution_time, djob['Portal']))
 
         print("Done")
