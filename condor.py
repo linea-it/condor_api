@@ -10,12 +10,12 @@ import datetime
 import subprocess
 from database import *
 from utils import Utils
-#teste
+
 
 class Condor():
+    """ responsible for managing actions with HTCondor """
 
     def __init__(self):
-
         try:
             self.config = configparser.ConfigParser()
             self.config.read('config.ini')
@@ -26,74 +26,72 @@ class Condor():
 
         except Exception as e:
             raise e
-            raise SystemExit
 
-    def get_jobs(self,args,cols):
+    def get_jobs(self, args, cols):
+        """ gets jobs """
 
-      self.default_params = [
-        'Cmd', 'Args', 'ClusterId', 'GlobalJobId', 'Job', 'JobStartDate',
-        'JobStatus', 'Out', 'Owner', 'RemoteHost', 'RequestCpus',
-        'RequiresWholeMachine', 'UserLog'
-      ]
+        self.default_params = [
+            'Cmd', 'Args', 'ClusterId', 'GlobalJobId', 'Job', 'JobStartDate',
+            'JobStatus', 'Out', 'Owner', 'RemoteHost', 'RequestCpus',
+            'RequiresWholeMachine', 'UserLog'
+        ]
 
-      self.params = self.default_params + str(cols).split(',')
-      self.requirements = ''
+        self.params = self.default_params + str(cols).split(',')
+        self.requirements = ''
 
-      if len(args):
-        t = 0
+        if len(args):
+            t = 0
+
         for arg in args:
-          self.requirements += arg + '==' + str(args[arg])
-          if t <= len(args) - 2:
-            self.requirements += '&&'
-            t = t + 1
-      else:
-        self.requirements = None
+            self.requirements += arg + '==' + str(args[arg])
+            if t <= len(args) - 2:
+                self.requirements += '&&'
+                t = t + 1
+            else:
+                self.requirements = None
 
-      self.jobs = []
+        self.jobs = list()
 
-      if self.condor_version >= '8.8.1':
-
-        try:
-            for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
+        if self.condor_version >= '8.8.1':
+            try:
+                for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
                     self.schedd = htcondor.Schedd(schedd_ad)
-                    self.jobs += self.schedd.xquery(projection=self.params,
-                                              requirements=self.requirements)
-        except Exception as e:
-          print(str(e))
-          raise e
-      else:
-          condor_q = os.popen("condor_q -l -global")
-          ads = classad.parseOldAds(condor_q)
-          for ad in ads:
-            self.jobs.append(ad)
+                    self.jobs += self.schedd.xquery(projection=self.params, requirements=self.requirements)
+            except Exception as e:
+                raise e
+        else:
+            condor_q = os.popen("condor_q -l -global")
+            ads = classad.parseOldAds(condor_q)
+            for ad in ads:
+                self.jobs.append(ad)
 
-      self.job_procs = {}
-      self.info = {}
+        self.job_procs = {}
+        self.info = {}
 
-      rows = list()
+        rows = list()
 
-      for job in range(len(self.jobs)):
-          process = self.jobs[job].get('Args', '').split(' ').pop()
-          jobid = self.jobs[job].get('GlobalJobId', '')
-          self.info['owner'] = self.jobs[job].get('Owner', '')
+        for job in range(len(self.jobs)):
+            process = self.jobs[job].get('Args', '').split(' ').pop()
+            jobid = self.jobs[job].get('GlobalJobId', '')
+            self.info['owner'] = self.jobs[job].get('Owner', '')
 
-          portal = None
-          if self.jobs[job].get('Cmd', '').find('pypeline/bin/run.py') > -1:
-              portal = self.jobs[job].get('Owner', '')
+            portal = None
+            if self.jobs[job].get('Cmd', '').find('pypeline/bin/run.py') > -1:
+                portal = self.jobs[job].get('Owner', '')
 
-          row = dict({
-              'Process': process,
-              'Job': jobid,
-              'Portal': portal,
-              'ClusterName': self.cluster_name
-          })
+            row = dict({
+                'Process': process,
+                'Job': jobid,
+                'Portal': portal,
+                'ClusterName': self.cluster_name
+            })
 
-          for info in self.jobs[job]:
-              row[info] = str(self.jobs[job][info])
+            for info in self.jobs[job]:
+                row[info] = str(self.jobs[job][info])
 
-          rows.append(row)
+            rows.append(row)
 
-      return rows
+        return rows
 
     def get_nodes(self, match, *args):
 
@@ -183,8 +181,6 @@ class Condor():
         for ad in ads:
             rows.append(ad)
 
-        print (rows)
-
         return rows
 
     def get_remote_history(self, args, cols, limit):
@@ -206,9 +202,7 @@ class Condor():
         rows = list()
 
         for submitter in self.config.sections():
-
             if submitter != 'condor' and self.config[submitter]['Remote'] == 'Yes' :
-
                 scheduler = self.config[submitter]['Scheduler']
                 user = self.config[submitter]['user']
                 key = self.config[submitter]['Key']
@@ -238,10 +232,13 @@ class Condor():
         if cols:
             projection = cols
         else:
-            projection = ['Cmd', 'Args', 'ClusterId','ProcId','QDate', \
-                        'JobStartDate','CompletionDate','JobFinishedHookDone', \
-                        'JobStatus','Out','Owner','RemoteHost','RequestCpus', \
-                        'RequiresWholeMachine', 'UserLog', 'LastRemoteHost']
+            projection = [
+                'Cmd', 'Args', 'ClusterId','ProcId', 'QDate', 'JobStartDate',
+                'CompletionDate', 'JobFinishedHookDone', 'JobStatus', 'Out',
+                'Owner', 'RemoteHost', 'RequestCpus', 'RequiresWholeMachine',
+                'UserLog', 'LastRemoteHost'
+            ]
+
         if limit is '':
             limit = False
 
@@ -282,9 +279,6 @@ class Condor():
         with schedd.transaction() as txn:
             clusterId = sub.queue(txn, n_queues)
 
-        print("clusterId:")
-        print(clusterId)
-
         # Listar os jobs
         jobs = list()
         for job in schedd.xquery(
@@ -306,8 +300,6 @@ class Condor():
 
         try:
             schedd.act(htcondor.JobAction.Remove, 'ClusterId==%s && ProcId==%s' % (clusterId, procId))
-
-
             job = self.get_job(clusterId, procId, ["ClusterId", "ProcId", "JobStatus"])
 
             return dict({
@@ -402,7 +394,7 @@ class Condor():
 
         return j
 
-    def job_history(self,args,cols,limit,offset):
+    def job_history(self, args, cols, limit, offset):
 
         search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
 
@@ -424,6 +416,9 @@ class Condor():
         else:
             sql = 'select {} from condor_history'.format(cols)
             sql_count = 'select count(*) from condor_history'
+
+        print("---->")
+        print(sql)
 
         if('ordering' in args):
             if(args['ordering'][0] == '-'):
@@ -493,7 +488,6 @@ class Condor():
     def update_execution_time(self):
 
         try:
-
             jobs = self.job_history({}, None, None, None)
 
             for job in jobs['data']:
@@ -530,7 +524,7 @@ class Condor():
         if requirements:
             sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history WHERE {} GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'.format(requirements_sql)
         else:
-           sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'
+            sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'
 
         if limit:
             sql += ' limit {}'.format(limit)
