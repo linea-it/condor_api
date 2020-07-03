@@ -1,5 +1,7 @@
 import sqlite3
+from sqlite3 import Error
 from flask import g
+import os
 
 DATABASE = 'database.db'
 
@@ -48,3 +50,45 @@ def query_dict(query, args=(), one=False):
         cur.execute(query,args)
         return cur.fetchall()
 
+
+def create_connection(db_file):
+    """ create a database connection to the SQLite database
+        specified by db_file
+    :param db_file: database file
+    :return: Connection object or None
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except Error as e:
+        print(e)
+
+    return conn
+
+
+def init_db():
+    """ """
+
+    os.remove(DATABASE)
+    conn = create_connection(DATABASE)
+
+    try:
+        c = conn.cursor()
+        c.execute(""" CREATE TABLE condor_history (
+            JobID int, Args varchar, ClusterName varchar, Job varchar, Cmd varchar,
+            GlobalJobId varchar primary key, Qdate datetime, JobStartDate datetime,
+            CompletionDate datetime, JobFinishedHookDone datetime, JobStatus int,
+            Out varchar, Owner varchar, Process varchar, RequestCpus int,
+            ServerTime datetime, UserLog varchar, RequiresWholeMachine varchar,
+            LastRemoteHost varchar , ExecutionTime real, ClusterId int,
+            ParentId varchar, Portal varchar, ProcessId varchar
+        )""")
+    except Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+if __name__ == '__main__':
+    init_db()

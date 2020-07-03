@@ -30,6 +30,28 @@ def submit_job():
     return jsonify(result)
 
 
+@application.route('/parent_jobs', methods=['GET'])
+def parent_jobs():
+    """ gets parent jobs """
+
+    condor_m = Condor()
+    cols, args = list(), dict()
+
+    if len(request.args):
+        args = request.args.to_dict()
+
+        if 'cols' in args:
+            cols = request.args.get('cols').split(',')
+            args.pop('cols')
+
+        if 'group' in args:
+            group = request.args.get('group')
+            args.pop('group')
+            return jsonify(condor_m.get_parent_jobs(args, cols, group))
+
+    return jsonify(condor_m.get_parent_jobs(args, cols))
+
+
 @application.route('/jobs', methods=['GET'])
 def jobs():
     """ gets jobs """
@@ -37,13 +59,11 @@ def jobs():
     cols, args = list(), dict()
 
     if len(request.args):
-            args = request.args.to_dict()
+        args = request.args.to_dict()
 
-            if 'cols' in args:
-                args.pop('cols')
-
-    if request.args.get('cols'):
-        cols = request.args.get('cols')
+        if 'cols' in args:
+            args.pop('cols')
+            cols = request.args.get('cols')
 
     condor_m = Condor()
     return jsonify(condor_m.get_jobs(args, cols))
@@ -284,13 +304,18 @@ def test_endpoint():
     return jsonify(condor_m.parse_requirements(args))
 
 
-# @application.route('/update_db', methods=['GET'])
-# def update_db():
-#   condor_m = Condor()
-#   response = jsonify(condor_m.update_db())
-#   return response
-
+@application.route('/update_db', methods=['GET'])
 def update_db():
+    """ """
+    days = None
+    if request.args.get('days', None):
+        days = request.args.get('days')
+
+    condor_m = Condor()
+    return jsonify(condor_m.update_db())
+
+
+def update_db_scheduler():
     with application.app_context():
         condor_m = Condor()
         condor_m.update_db()
@@ -301,9 +326,9 @@ if __name__ == '__main__':
     if scheduler.get_jobs():
         print ("Job ainda rodando")
     else:
-        scheduler.add_job(update_db, 'interval', minutes=10, max_instances=1)
+        scheduler.add_job(update_db_scheduler, 'interval', minutes=10, max_instances=1)
 
     scheduler.start()
 
     #application.run(host='localhost', port=5000, debug=True)
-    application.run(host='186.232.60.33', port=5000, debug=True)
+    application.run(host='186.232.60.33', port=5011, debug=True)

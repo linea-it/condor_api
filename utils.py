@@ -6,11 +6,9 @@ class Utils():
         search = []
 
         for arg in args:
-
-            if len(arg.split('__')) == 2:
-
-                requirement = arg.split('__')[0]
-                condition = arg.split('__')[1]
+            arg_split = arg.split("__")
+            if len(arg_split) == 2:
+                requirement, condition = arg_split[0], arg_split[1]
                 value = args[arg]
 
                 if requirement and condition:
@@ -28,7 +26,11 @@ class Utils():
                         if len(value.split(',')) == 2:
                             requirements.append(requirement + ' ' + 'BETWEEN' + ' ' + self.parse_value(value.split(',')[0]) + ' ' + 'AND' + ' ' + self.parse_value(value.split(',')[1]) )
                     elif condition in 'contains':
-                        requirements.append(requirement + ' ' + 'like' + ' ' + '"' + '%' + eval(self.parse_value(value)) + '%' + '"')
+                        # requirements.append(requirement + ' ' + 'like' + ' ' + '"' + '%' + str(value) + '%' + '"')
+                        print('{} like "%{}%"'.format(requirement, str(value)))
+                        requirements.append('{} like "%{}%"'.format(requirement, str(value)))
+                    else:
+                        raise Exception("The condition {} does not exist in the API.".format(condition))
 
             if(arg == 'search'):
                 if(args[arg] is not ''):
