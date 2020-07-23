@@ -62,9 +62,8 @@ def jobs():
         args = request.args.to_dict()
 
         if 'cols' in args:
+            cols = request.args.get('cols').split(',')
             args.pop('cols')
-            cols = request.args.get('cols')
-
     condor_m = Condor()
     return jsonify(condor_m.get_jobs(args, cols))
 

@@ -66,8 +66,7 @@ class Condor():
             'JobStatus', 'Out', 'Owner', 'RemoteHost', 'RequestCpus',
             'RequiresWholeMachine', 'UserLog'
         ]
-
-        self.params = self.default_params + cols
+        self.params = self.default_params  + cols
         self.requirements = None
 
         if len(args):
@@ -107,10 +106,10 @@ class Condor():
             jobid = self.jobs[job].get('GlobalJobId', '')
             self.info['owner'] = self.jobs[job].get('Owner', '')
 
-            portal, process_id = None, "cluster.{}".format(self.jobs[job].get('ClusterId'))
+            portal, process_id = None, "manual.{}".format(self.jobs[job].get('ClusterId'))
             if self.jobs[job].get('Cmd', '').find('pypeline/bin/run.py') > -1:
                 portal = self.jobs[job].get('Owner', '')
-                process_id = "portal.{}".format(process)
+                process_id = "des-portal.{}".format(process)
 
             row = dict({
                 'Process': process,
