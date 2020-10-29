@@ -1,140 +1,277 @@
 from condor import Condor
-from flask import Flask, render_template, request, jsonify
+from database import db, clear_jsondb
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import threading
-from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import json
+import os
+from apscheduler.schedulers.background import BackgroundScheduler
+from filelock import FileLock
 
 application = Flask(__name__)
 cors = CORS(application, resources={r"/*": {"origins": "*"}})
 
-
-@application.route('/')
-def index():
-    condor_m = Condor()
-    return render_template('index.html')
+CONDOR = Condor()
+JSONDB = "jsondb"
 
 
-@application.route('/users')
-def users():
-    condor_m = Condor()
-    return render_template('users.html')
+def get_jobs_by_section(prefix, section, func, expire=None, cols=list(), force=False):
+    """ Retrieves job information per section using memcached """
+
+    key = '{}-{}'.format(prefix, section)
+    jsonpath = os.path.join(JSONDB,'{}.json'.format(key))
+    data = db.get(key)
+
+    if not data or not os.path.isfile(jsonpath):
+        data = func(section, cols)
+        db.set(key, jsonpath, expire=expire)
+        with FileLock("{}.lock".format(jsonpath)):
+            with open(jsonpath, 'w') as outfile:
+                json.dump(data, outfile)
+    elif force:
+        data = func(section, cols)
+        db.replace(key, jsonpath, expire=expire)
+        with FileLock("{}.lock".format(jsonpath)):
+            with open(jsonpath, 'w') as outfile:
+                json.dump(data, outfile)
+    else:
+        with open(jsonpath) as jsonfile:
+            data = json.load(jsonfile)
+
+    return data
+
+
+@application.route('/sections', methods=['GET'])
+def sections():
+    """ Gets sections by config.ini """
+
+    sections = CONDOR.get_sections()
+    section_list = list()
+
+    for key in sections.keys():
+        section = sections[key]
+        section["Section"] = key
+        section_list.append(section)
+
+    return jsonify(section_list)
+
+
+@application.route('/jobs_by_key', methods=['GET'])
+def jobs_by_key():
+    """ Gets jobs by applications """
+
+    force, cols, section, history = False, list(), None, False
+
+    args = request.args.to_dict()
+
+    if not 'key' in args:
+        return jsonify({"error": "It is necessary to inform a key to group the jobs (/jobs_by_key?key=<key>)"})
+
+    key = args.get('key')
+
+    if 'cols' in args:
+        cols = args.get('cols').split(',')
+
+    if 'force' in args and args.get('force').lower() == 'true':
+        force = True
+
+    if 'section' in args:
+        section = args.get('section')
+
+    if 'history' in args and args.get('history').lower() == 'true':
+            history = True
+
+    sections = CONDOR.get_sections()
+
+    def _get_jobs(data):
+        if history:
+            data['data'] = get_jobs_by_section(
+                "history", section, CONDOR.get_history_by_section,
+                600, cols, force
+            )
+        else:
+            data['data'] = get_jobs_by_section(
+                "running", section, CONDOR.get_running_by_section,
+                60, cols, force
+            )
+        data['count'] = len(data.get('data'))
+        return data
+
+    if section:
+        data = sections[section]
+        data = _get_jobs(data)
+        return jsonify(CONDOR.group_by_key(dict(section=data), key))
+
+    for section in sections:
+        data = sections.get(section)
+        data = _get_jobs(data)
+        sections[section] = data
+
+    return jsonify(CONDOR.group_by_key(sections, key))
+
+
+@application.route('/history_jobs_by_cluster_id', methods=['GET'])
+def history_jobs_by_cluster_id():
+    """ Gets history jobs by Cluster Id """
+
+    force, cols, section = False, list(), "main"
+    args = request.args.to_dict()
+
+    if not 'id' in args:
+        return jsonify({"error": "It is necessary to inform a Cluster Id (/history_jobs_by_cluster_id?id=<cluster_id>)"})
+
+    cluster_id = args.get('id')
+
+    if 'cols' in args:
+        cols = args.get('cols').split(',')
+
+    if 'force' in args and args.get('force').lower() == 'true':
+        force = True
+
+    if 'section' in args:
+        section = args.get('section')
+
+    key = 'clusterid-{}-{}'.format(cluster_id, section)
+    jsonpath = os.path.join(JSONDB,'{}.json'.format(key))
+    data = db.get(key)
+
+    if not data or not os.path.isfile(jsonpath):
+        data = CONDOR.get_history_jobs_by_cluster_id(section, cluster_id, cols)
+        db.set(key, jsonpath)
+        with FileLock("{}.lock".format(jsonpath)):
+            with open(jsonpath, 'w') as outfile:
+                json.dump(data, outfile)
+    elif force:
+        data = CONDOR.get_history_jobs_by_cluster_id(section, cluster_id, cols)
+        db.replace(key, jsonpath)
+        with FileLock("{}.lock".format(jsonpath)):
+            with open(jsonpath, 'w') as outfile:
+                json.dump(data, outfile)
+    else:
+        with open(jsonpath) as jsonfile:
+            data = json.load(jsonfile)
+
+    return jsonify(data)
 
 
 @application.route('/submit_job', methods=['POST'])
 def submit_job():
-    """ submit job """
+    """ Submit job """
 
-    condor_m = Condor()
-    result = condor_m.submit_job(request.json)
+    result = CONDOR.submit_job(request.json)
     return jsonify(result)
 
 
-@application.route('/parent_jobs', methods=['GET'])
-def parent_jobs():
-    """ gets parent jobs """
+@application.route('/history', methods=['GET'])
+def history():
+    """ Gets history  """
 
-    condor_m = Condor()
-    cols, args = list(), dict()
+    force, cols, section = False, list(), None
 
     if len(request.args):
         args = request.args.to_dict()
 
         if 'cols' in args:
-            cols = request.args.get('cols').split(',')
-            args.pop('cols')
+            cols = args.get('cols').split(',')
 
-        if 'group' in args:
-            group = request.args.get('group')
-            args.pop('group')
-            return jsonify(condor_m.get_parent_jobs(args, cols, group))
+        if 'force' in args and args.get('force') == 'True':
+            force = True
 
-    return jsonify(condor_m.get_parent_jobs(args, cols))
+        if 'section' in args:
+            section = args.get('section')
+
+    sections = CONDOR.get_sections()
+
+    if section:
+        data = sections[section]
+        data['data'] = get_jobs_by_section(
+            "history", section, CONDOR.get_history_by_section,
+            600, cols, force
+        )
+        data['count'] = len(data.get('data'))
+        return jsonify(data)
+
+    for section in sections:
+        sections[section]['data'] = get_jobs_by_section(
+            "history", section, CONDOR.get_history_by_section,
+            600, cols, force
+        )
+        sections[section]['count'] = len(sections[section].get('data'))
+
+    return jsonify(sections)
 
 
 @application.route('/jobs', methods=['GET'])
 def jobs():
-    """ gets jobs """
+    """ Gets jobs running """
 
-    cols, args = list(), dict()
+    force, cols, section = False, list(), None
 
     if len(request.args):
         args = request.args.to_dict()
 
         if 'cols' in args:
-            cols = request.args.get('cols').split(',')
+            cols = args.get('cols').split(',')
             args.pop('cols')
-    condor_m = Condor()
-    return jsonify(condor_m.get_jobs(args, cols))
+
+        if 'force' in args and args.get('force') == 'True':
+            force = True
+
+        if 'section' in args:
+            section = args.get('section')
+
+    sections = CONDOR.get_sections()
+
+    if section:
+        data = sections[section]
+        data['data'] = get_jobs_by_section(
+            "running", section, CONDOR.get_running_by_section,
+            60, cols, force
+        )
+        data['count'] = len(data.get('data'))
+        return jsonify(data)
+
+    for section in sections:
+        sections[section]['data'] = get_jobs_by_section(
+            "running", section, CONDOR.get_running_by_section,
+            60, cols, force
+        )
+        sections[section]['count'] = len(sections[section].get('data'))
+
+    return jsonify(sections)
 
 
 @application.route('/users_stats', methods=['GET'])
 def get_users_stats():
-    """ gets users stats """
+    """ Gets users stats """
 
-    condor_m = Condor()
-    jobs = condor_m.get_jobs({}, [])
-    users = list()
-    rows = list()
+    sections = CONDOR.get_sections()
 
-    for j in jobs:
-        if 'Owner' in j:
-            if j['Owner'] not in users:
-                users.append(j['Owner'])
-        else:
-            j['Owner'] = ''
+    for section in sections:
+        sections[section]['data'] = get_jobs_by_section(
+            "running", section, CONDOR.get_running_by_section, 60
+        )
 
-    for user in users:
-        userjobs = condor_m.get_jobs({'Owner': '"'+user+'"'}, [])
-        nodes = condor_m.get_nodes('', [])
-        total_nodes = len(nodes)
-        owner = user
-        portal_jobs, manual_jobs, user_jobs_running, user_jobs_idle, cluster_utilization = 0, 0, 0, 0, 0
-        cluster = ''
-        cores = int()
-        processes, userslots = list(), list()
+    return jsonify(CONDOR.users_running(sections))
 
-        for j in userjobs:
-            job  = j['Process'].split('100')
-            cluster = j['ClusterName']
 
-            if job[0]:
-                manual_jobs += 1
-            else:
-                portal_jobs += 1
+@application.route('/top_users', methods=['GET'])
+def get_top_users():
+    """ Gets cluster's top users """
 
-                if j['Process'] not in processes:
-                    processes.append(j['Process'])
+    sections = CONDOR.get_sections()
 
-            if j['JobStatus'] == "1":
-                user_jobs_idle += 1
+    for section in sections:
+        sections[section]['data'] = get_jobs_by_section(
+            "history", section, CONDOR.get_history_by_section, 600
+        )
 
-            if j['JobStatus'] == "2":
-                user_jobs_running += 1
-
-            for n in nodes:
-                if j['JobStatus'] == "2":
-                    if 'RemoteHost' in j and j['RemoteHost'] == n['Name']:
-                        if 'RequiresWholeMachine' in j:
-                            cores += int(round(float(n['TotalCpus'])))
-                        else:
-                            cores += 1
-
-        div = total_nodes / 100
-        total = div * cores / 100
-
-        rows.append({'Owner': owner, 'PortalProcesses': len(processes),
-        'ManualJobs': manual_jobs,
-        'Cluster': cluster,
-        'Waiting': user_jobs_idle,
-        'Running': user_jobs_running,'ClusterUtilization': total})
-
-    return jsonify(rows)
+    return jsonify(CONDOR.top_users_history(sections))
 
 
 @application.route('/nodes', methods=['GET'])
 def nodes():
-    """ gets info per nodes """
+    """ Gets info per nodes """
 
     args = list()
     match = myString = ",".join(request.args.getlist('match'))
@@ -144,190 +281,45 @@ def nodes():
         if 'match' in args:
             args.remove('match')
 
-    condor_m = Condor()
-
-    return jsonify(condor_m.get_nodes(match, args))
-
-
-@application.route('/parent_history', methods=['GET'])
-def parent_history():
-    """ gets history info per parents """
-
-    cols, args, limit, offset = list(), dict(), False, False
-
-    if len(request.args):
-        args = request.args.to_dict()
-
-    if request.args.get('cols'):
-        cols = request.args.get('cols').split(',')
-        args.pop('cols')
-
-    if request.args.get('limit'):
-        limit = int(request.args.get('limit'))
-        args.pop('limit')
-
-    if request.args.get('offset'):
-        offset = int(request.args.get('offset'))
-        args.pop('offset')
-
-    condor_m = Condor()
-    return jsonify(condor_m.job_parent_history(args, cols, limit, offset))
-
-
-@application.route('/history', methods=['GET'])
-def history():
-    """ gets history info """
-
-    cols, args, limit, offset = list(), dict(), False, False
-
-    if len(request.args):
-        args = request.args.to_dict()
-
-    if request.args.get('cols'):
-        cols = request.args.get('cols').split(',')
-        args.pop('cols')
-
-    # if request.args.get('search'):
-    #   search = request.args.get('search')
-    #   args.pop('search')
-
-    if request.args.get('limit'):
-        limit = int(request.args.get('limit'))
-        args.pop('limit')
-
-    if request.args.get('offset'):
-        offset = int(request.args.get('offset'))
-        args.pop('offset')
-
-    condor_m = Condor()
-
-    response = jsonify(condor_m.job_history(args, cols, limit, offset))
-
-    return response
-
-@application.route('/old_history', methods=['GET'])
-def old_history():
-    """ """
-    cols, args, limit, offset = list(), dict(), False, False
-
-    if len(request.args):
-        args = request.args.to_dict()
-
-    if request.args.get('cols'):
-        cols = request.args.get('cols').split(',')
-        args.pop('cols')
-
-    # if request.args.get('search'):
-    #   search = request.args.get('search')
-    #   args.pop('search')
-
-    if request.args.get('limit'):
-        limit = int(request.args.get('limit'))
-        args.pop('limit')
-
-    if request.args.get('offset'):
-        offset = int(request.args.get('offset'))
-        args.pop('offset')
-
-    condor_m = Condor()
-
-    return jsonify(condor_m.get_cluster_history(args, cols, limit))
+    return jsonify(CONDOR.get_nodes(match, args))
 
 
 @application.route('/remove', methods=['GET'])
 def remove():
-    """ removes job by ClusterId and ProcId """
+    """ Removes job by ClusterId and ProcId """
 
     args = request.args.to_dict()
 
     if 'ClusterId' not in args or 'ProcId' not in args:
         raise Exception("Parameter ClusterId and ProcId are required")
 
-    condor_m = Condor()
-
-    return jsonify(condor_m.remove_job(args['ClusterId'], args['ProcId']))
+    return jsonify(CONDOR.remove_job(args['ClusterId'], args['ProcId']))
 
 
 @application.route('/get_job', methods=['GET'])
 def get_job():
-    """ gets job by ClusterId and ProcId """
+    """ Gets job by ClusterId and ProcId """
 
     args = request.args.to_dict()
 
     if 'ClusterId' not in args or 'ProcId' not in args:
         raise Exception("Parameter ClusterId and ProcId are required")
 
-    condor_m = Condor()
-
-    return jsonify(condor_m.get_job(args['ClusterId'], args['ProcId']))
+    return jsonify(CONDOR.get_job(args['ClusterId'], args['ProcId']))
 
 
-@application.route('/top_users', methods=['GET'])
-def get_top_users():
-    """ gets cluter's top users """
-    cols = list()
-    args = dict()
-    limit = False
-    offset = False
-
-    if len(request.args):
-        args = request.args.to_dict()
-
-    if request.args.get('limit'):
-        limit = int(request.args.get('limit'))
-        args.pop('limit')
-
-    condor_m = Condor()
-
-    return jsonify(condor_m.top_users_history(args, limit))
-
-
-@application.route('/test_endpoint', methods=['GET'])
-def test_endpoint():
-    cols = list()
-    args = dict()
-    limit = 100
-
-    if len(request.args):
-        args = request.args.to_dict()
-
-    if request.args.get('cols'):
-        cols = request.args.get('cols').split(',')
-        args.pop('cols')
-
-    if request.args.get('limit'):
-        limit = int(request.args.get('limit'))
-        args.pop('limit')
-
-    condor_m = Condor()
-    return jsonify(condor_m.parse_requirements(args))
-
-
-@application.route('/update_db', methods=['GET'])
-def update_db():
-    """ """
-    days = None
-    if request.args.get('days', None):
-        days = request.args.get('days')
-
-    condor_m = Condor()
-    return jsonify(condor_m.update_db())
-
-
-def update_db_scheduler():
+def clear_filedir():
+    """ Clears db file directory """
     with application.app_context():
-        condor_m = Condor()
-        condor_m.update_db()
-
+        clear_jsondb(JSONDB)
 
 if __name__ == '__main__':
     scheduler = BackgroundScheduler()
-    if scheduler.get_jobs():
-        print ("Job ainda rodando")
-    else:
-        scheduler.add_job(update_db_scheduler, 'interval', minutes=10, max_instances=1)
+    if not scheduler.get_jobs():
+        scheduler.add_job(clear_filedir, 'interval', minutes=10, max_instances=1)
 
     scheduler.start()
 
-    #application.run(host='localhost', port=5000, debug=True)
+    os.makedirs(JSONDB, exist_ok=True)
     application.run(host='186.232.60.33', port=5011, debug=True)
+    #application.run(host='localhost', port=5000, debug=True

@@ -1,313 +1,154 @@
 import htcondor
 import classad
-import json
-import urllib
 import os
-import configparser
-import io
-import time
 import datetime
-import subprocess
-from database import *
-from utils import Utils
+import configparser
+
+JOB_STATUS = {
+    "0": "Unexpanded", "1": "Idle",
+    "2": "Running", "3": "Removed",
+    "4": "Completed", "5": "Held",
+    "6": "Submission_err"
+}
+
+CONVERT_DATE = [
+    'JobStartDate', 'JobCurrentStartDate',
+    'QDate', 'JobFinishedHookDone' ]
 
 
 class Condor():
-    """ responsible for managing actions with HTCondor """
+    """ Responsible for managing actions with HTCondor """
+
 
     def __init__(self):
-        try:
-            self.config = configparser.ConfigParser()
-            self.config.read('config.ini')
+        self.config = configparser.ConfigParser()
+        self.config.read('condor.ini')
 
-            self.cluster_name = self.config.get('condor', 'cluster_name')
-            self.condor_scheduler = self.config.get('condor', 'scheduler')
-            self.condor_version = self.config.get('condor', 'condor_version')
-
-        except Exception as e:
-            raise e
-
-    def get_parent_jobs(self, args, cols, group_name="ClusterId"):
-        """ gets parent jobs """
-
-        jobs = self.get_jobs(args, cols)
-
-        parents_dict = dict()
-
-        for job in jobs:
-            group = job.get(group_name)
-
-            if not group in parents_dict:
-                parents_dict[group] = {
-                    group_name: group,
-                    "Owner": job.get("Owner", None),
-                    "ClusterName": job.get("ClusterName", None),
-                    "Cmd": job.get("Cmd", None),
-                    "Portal": job.get("Portal", None),
-                    "ProcessId": job.get("ProcessId", None),
-                    "Jobs": list()
-                }
-
-            parents_dict[group]["Jobs"].append(job)
-
-        parents_list = list()
-
-        for key in parents_dict.keys():
-            parents_list.append(parents_dict[key])
-
-        return parents_list
-
-
-    def get_jobs(self, args, cols):
-        """ gets jobs """
-
-        self.default_params = [
-            'Cmd', 'Args', 'ClusterId', 'GlobalJobId', 'Job', 'JobStartDate',
-            'JobStatus', 'Out', 'Owner', 'RemoteHost', 'RequestCpus',
-            'RequiresWholeMachine', 'UserLog'
+        self.required_columns = [
+            'Cmd', 'Args', 'ClusterId', 'GlobalJobId', 'JobStatus', 'RemoteHost',
+            'JobStartDate', 'ProcId', 'LastRemoteHost', 'JobFinishedHookDone',
+            'Owner', 'AppType', 'AppUser', 'AppId', 'AppName', 'AppModule',
+            'RequiresWholeMachine'
         ]
-        self.params = self.default_params  + cols
-        self.requirements = None
 
-        if len(args):
-            self.requirements = str()
-            t = 0
+        self.cluster_info = self.__get_cluster_info()
 
-        for arg in args:
-            self.requirements += arg + '==' + str(args[arg])
-            if t <= len(args) - 2:
-                self.requirements += '&&'
-                t = t + 1
 
-        self.jobs = list()
+    def get_sections(self):
+        """ Gets sessions info by config.ini """
 
-        if self.condor_version >= '8.8.1':
-            try:
+        sections = dict()
+
+        for section in self.config.sections():
+            scheduler = self.config.get(section, "scheduler").split(".")
+            scheduler.reverse()
+            scheduler = scheduler.pop()
+            sections[section] = {
+                "ClusterName": self.config.get(section, "cluster_name"),
+                "Scheduler": scheduler
+            }
+
+        return sections
+
+
+    def get_history_by_section(self, section, cols=list()):
+        """ Gets history by section """
+
+        cols = list(set(self.required_columns + cols))
+
+        if section == 'main':
+            match = self.config.get('main', 'max_entries')
+
+            jobs = dict()
+
+            if self.config.get('main', 'condor_version') >= '8.8.0':
+                schedd = htcondor.Schedd()
+                ads = schedd.history(
+                    requirements='JobFinishedHookDone=!=""',
+                    projection=cols,
+                    match=int(match)
+                )
+            else:
+                cmd_initial = "condor_history -backwards -match {}".format(match)
+                cmd = self.__get_cmd(cmd_initial, cols)
+                ads = self.__run(cmd)
+        else:
+            # get remote history
+            cmd_initial = "condor_history -backwards"
+            cmd = self.__get_remote_cmd(cmd_initial, section, cols, history=True)
+            ads = self.__run(cmd)
+
+        return self.__group_jobs(ads, section)
+
+
+    def group_by_key(self, sections, key):
+        """ Group jobs by key """
+
+        data = dict()
+
+        for section in sections:
+            jobs = sections[section].get('data', [])
+            for job in jobs:
+                value = job.get(key, "-")
+                if not value in data:
+                    data[value] = list()
+
+                job_list = data[value]
+                job_list.append(job)
+
+        return data
+
+
+    def get_history_jobs_by_cluster_id(self, section, cluster_id, cols=[]):
+        """ Gets history jobs by Cluster Id """
+
+        cols = list(set(self.required_columns + cols))
+
+        if section == 'main':
+            if self.config.get('main', 'condor_version') >= '8.8.0':
+                schedd = htcondor.Schedd()
+                requirements = 'ClusterId=={}'.format(cluster_id)
+                ads = schedd.history(requirements, cols)
+            else:
+                cmd_initial = "condor_history {}".format(cluster_id)
+                cmd = self.__get_cmd(cmd_initial, cols)
+                ads = self.__run(cmd)
+        else:
+            # get remote history
+            cmd_initial = "condor_history {}".format(cluster_id)
+            cmd = self.__get_remote_cmd(cmd_initial, section, cols, history=True)
+            ads = self.__run(cmd)
+
+        return self.__group_jobs(ads, section)
+
+
+    def get_running_by_section(self, section, cols=list()):
+        """ Gets jobs running by section """
+
+        cols = list(set(self.required_columns + cols))
+        cmd_initial = "condor_q -l"
+
+        if section == 'main':
+            ads = list()
+            if self.config.get('main', 'condor_version') >= '8.8.0':
                 for schedd_ad in htcondor.Collector().locateAll(htcondor.DaemonTypes.Schedd):
-                    self.schedd = htcondor.Schedd(schedd_ad)
-                    self.jobs += self.schedd.xquery(projection=self.params, requirements=self.requirements)
-            except Exception as e:
-                raise e
+                    schedd = htcondor.Schedd(schedd_ad)
+                    ads += schedd.xquery(projection=cols)
+            else:
+                cmd = self.__get_cmd(cmd_initial, cols)
+                ads = self.__run(cmd)
         else:
-            condor_q = os.popen("condor_q -l -global")
-            ads = classad.parseOldAds(condor_q)
-            for ad in ads:
-                self.jobs.append(ad)
+            # get remote
+            cmd = self.__get_remote_cmd(cmd_initial, section, cols, history=False)
+            ads = self.__run(cmd)
 
-        self.job_procs = {}
-        self.info = {}
-
-        rows = list()
-
-        for job in range(len(self.jobs)):
-            proc_args = self.jobs[job].get('Args', '').split(' ')
-            proc_args.reverse()
-            process = proc_args.pop()
-            jobid = self.jobs[job].get('GlobalJobId', '')
-            self.info['owner'] = self.jobs[job].get('Owner', '')
-
-            portal, process_id = None, "manual.{}".format(self.jobs[job].get('ClusterId'))
-            if self.jobs[job].get('Cmd', '').find('pypeline/bin/run.py') > -1:
-                portal = self.jobs[job].get('Owner', '')
-                process_id = "des-portal.{}".format(process)
-
-            row = dict({
-                'Process': process,
-                'ProcessId': process_id,
-                'Job': jobid,
-                'Portal': portal,
-                'ClusterName': self.cluster_name
-            })
-
-            for info in self.jobs[job]:
-                row[info] = str(self.jobs[job][info]) if not info in row else row[info]
-
-            rows.append(row)
-
-        return rows
-
-    def get_nodes(self, match, *args):
-
-        self.default_params = [
-            'UtsnameNodename', 'Name', 'State', 'Memory','Disk',
-            'TotalCpus','RemoteOwner', 'LoadAvg', 'Activity', 'JobStarts', 'RecentJobStarts','DiskUsage']
-        self.params = self.default_params + args[0]
-        self.requirements = str(match).replace(
-            "=", "==").replace(',', '&&') if match else None
-        self.rows = list()
-
-        coll = htcondor.Collector()
-        query = coll.query(htcondor.AdTypes.Startd, projection=self.params)
-
-        for node in range(len(query)):
-            row = dict()
-
-            for key in query[node].keys():
-                row[key] = str(query[node].get(key))
-
-            self.rows.append(row)
-
-        return self.rows
-
-
-    def get_history(self, args, cols, limit):
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
-
-        if requirements is '':
-            requirements = 'JobFinishedHookDone=!=""'
-
-        if cols:
-            projection = cols
-        else:
-            projection = [
-                'Cmd', 'Args', 'ClusterId','ProcId', 'QDate', 'JobStartDate',
-                'CompletionDate', 'JobFinishedHookDone', 'JobStatus', 'Out',
-                'Owner', 'RemoteHost', 'RequestCpus', 'RequiresWholeMachine',
-                'UserLog', 'LastRemoteHost'
-            ]
-
-        if limit is '':
-            limit = False
-
-        rows = list()
-
-        schedd = htcondor.Schedd()
-        for job in schedd.history(
-            requirements,
-            projection,
-            limit):
-
-            if len(job):
-                rows.append(self.parse_job_to_dict(job))
-
-        return rows
-
-    def get_old_history(self, args, cols, limit):
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
-
-        if requirements is '':
-            requirements = 'JobFinishedHookDone=!=""'
-
-        if cols:
-            projection = cols
-        else:
-            projection = [
-                'Cmd', 'Args', 'ClusterId','ProcId', 'QDate', 'JobStartDate',
-                'CompletionDate', 'JobFinishedHookDone', 'JobStatus', 'Out',
-                'Owner', 'RemoteHost', 'RequestCpus', 'RequiresWholeMachine',
-                'UserLog', 'LastRemoteHost'
-            ]
-
-        if limit is '':
-            limit = False
-
-        rows = list()
-
-        command = 'condor_history -l -constraint \'({})\''.format(requirements)
-
-        p = subprocess.Popen(command,shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
-
-        condor_history, err = p.communicate()
-
-        ads = classad.parseOldAds(condor_history)
-
-        for ad in ads:
-            rows.append(ad)
-
-        return rows
-
-    def get_remote_history(self, args, cols, limit):
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
-
-        if cols:
-            projection = cols
-        else:
-            projection = [
-                'Cmd', 'Args', 'ClusterId','ProcId', 'QDate', 'JobStartDate',
-                'CompletionDate', 'JobFinishedHookDone', 'JobStatus', 'Out',
-                'Owner', 'RemoteHost', 'RequestCpus', 'RequiresWholeMachine',
-                'UserLog', 'LastRemoteHost'
-            ]
-
-        if limit is '':
-            limit = False
-
-        rows = list()
-
-        for submitter in self.config.sections():
-            if submitter != 'condor' and self.config[submitter]['Remote'] == 'Yes' :
-                scheduler = self.config[submitter]['Scheduler']
-                user = self.config[submitter]['user']
-                key = self.config[submitter]['Key']
-                port = self.config[submitter]['Port']
-                cluster_name = self.config[submitter]['cluster_name']
-
-                command = 'ssh {} -p {} -l {} -i {} \"condor_history -l -constraint \'({})\'\"'.format(scheduler,port,user,key,requirements)
-                #command = 'ssh {} -p {} -l {} -i {} \"condor_history -l -match 100"'.format(scheduler,port,user,key,requirements)
-
-                p = subprocess.Popen(command,shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
-
-                condor_history, err = p.communicate()
-
-                ads = classad.parseOldAds(condor_history)
-
-                for ad in ads:
-                    ad['ClusterName'] = cluster_name
-                    rows.append(ad)
-
-        return rows
-
-
-    def get_cluster_history(self, args, cols, limit):
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
-
-        if cols:
-            projection = cols
-        else:
-            projection = [
-                'Cmd', 'Args', 'ClusterId','ProcId', 'QDate', 'JobStartDate',
-                'CompletionDate', 'JobFinishedHookDone', 'JobStatus', 'Out',
-                'Owner', 'RemoteHost', 'RequestCpus', 'RequiresWholeMachine',
-                'UserLog', 'LastRemoteHost'
-            ]
-
-        if limit is '':
-            limit = False
-
-        rows = list()
-
-        if self.condor_version >= '8.8.1':
-            history = self.get_history(args, cols, limit)
-        else:
-            history = self.get_old_history(args, cols, limit)
-
-        for job in history:
-            rows.append(job)
-
-        remote_history = self.get_remote_history(args, cols, limit)
-
-        for job in remote_history:
-            rows.append(job)
-
-        return rows
+        return self.__group_jobs(ads, section)
 
 
     def submit_job(self, params):
-        # TODO tratar execessao nesta funcao.
-        print("Params: ", params)
+        """ Submit job """
 
+        # TODO tratar excessao nesta funcao
         n_queues = params.get("queues", 1)
 
         submit_param = params.get("submit_params", None)
@@ -328,17 +169,18 @@ class Condor():
         for job in schedd.xquery(
                 projection=['ClusterId', 'ProcId', 'JobStatus'],
                 requirements='ClusterId==%s' % clusterId):
-            jobs.append(self.parse_job_to_dict(job))
-
+            jobs.append(self.__parser_job(dict(job)))
 
         return dict({
             'success': True,
             'jobs': jobs
         })
 
-    def remove_job(self, clusterId, procId):
-        print("Removing Job ClusterId: [%s] ProcId: [%s]" % (clusterId, procId))
 
+    def remove_job(self, clusterId, procId):
+        """ Removes job by ClusterId and ProcId """
+
+        print("Removing Job ClusterId: [%s] ProcId: [%s]" % (clusterId, procId))
         schedd = htcondor.Schedd()
 
         try:
@@ -354,25 +196,22 @@ class Condor():
                 'success': False
             })
 
+
     def get_job(self, clusterId, procId, projection=[]):
+        """ Gets job """
 
         schedd = htcondor.Schedd()
-
         requirements = 'ClusterId==%s && ProcId==%s' % (clusterId, procId)
 
         jobs = list()
         for job in schedd.xquery(requirements=requirements, projection=projection):
-            jobs.append(self.parse_job_to_dict(job))
+            jobs.append(self.__parser_job(job))
 
         if len(jobs) == 0:
             # Tenta recuperar o job do historico
-            for job in schedd.history(
-                requirements,
-                projection,
-                1):
-
+            for job in schedd.history(requirements, projection, 1):
                 if len(job) > 0:
-                    return self.parse_job_to_dict(job)
+                    return self.__parser_job(job)
                 else:
                     return None
 
@@ -381,239 +220,311 @@ class Condor():
         else:
             return jobs
 
-    def parse_job_to_dict(self, job):
-        j = dict()
 
-        for key in job.keys():
-            j[key] = str(job.get(key))
+    def get_nodes(self, match, *args):
+        """ Gets nodes info """
 
-        try:
-            j['JobId'] = j['ClusterId'] + '.' + j['ProcId']
-        except:
-            j['JobId'] = None
+        params = [
+            'UtsnameNodename', 'Name', 'State', 'Memory','Disk',
+            'TotalCpus','RemoteOwner', 'LoadAvg', 'Activity',
+            'JobStarts', 'RecentJobStarts','DiskUsage'
+        ]
 
-        j['ClusterName'] = j.get("ClusterName", None)
-        j['Cmd'] = j.get("Cmd", None)
-        j['Args'] = j.get('Args', '')
+        if args:
+            params += args[0]
 
-        proc_args = j.get('Args', '').split(' ')
-        proc_args.reverse()
-        j['Process'] = proc_args.pop()
+        requirements = str(match).replace(
+            "=", "==").replace(',', '&&') if match else None
+        rows = list()
 
-        j['GlobalJobId'] = j['GlobalJobId'] if ('GlobalJobId' in j) else None
+        coll = htcondor.Collector()
+        query = coll.query(htcondor.AdTypes.Startd, projection=params)
 
-        try:
-           date = j['JobStartDate']
-           j['JobStartDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
+        for node in range(len(query)):
+            row = dict()
 
-        try:
-           date = j['QDate']
-           j['QDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
+            for key in query[node].keys():
+                row[key] = str(query[node].get(key))
 
-        try:
-           date = j['CompletionDate']
-           if date:
-            j['CompletionDate'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
+            rows.append(row)
 
-        try:
-           date = j['JobFinishedHookDone']
-           j['JobFinishedHookDone'] = datetime.datetime.fromtimestamp(int(date)).strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
-
-        j['JobStatus'] = j['JobStatus'] if ('JobStatus' in j) else None
-        j['Out'] = j['Out'] if ('Out' in j) else None
-        j['Owner'] = j['Owner'] if ('Owner' in j) else None
-        j['ServerTime'] = j['ServerTime'] if ('ServerTime' in j) else None
-        j['UserLog'] = j['UserLog'] if ('UserLog' in j) else None
-        j['RequiresWholeMachine'] = j['RequiresWholeMachine'] if ('RequiresWholeMachine' in j) else None
-        j['LastRemoteHost'] = j['LastRemoteHost'] if ('LastRemoteHost' in j) else None
-
-        j['Portal'], j['ProcessId'] = None, "cluster.{}".format(j.get('ClusterId'))
-        if j['Cmd'] and j['Cmd'].find('pypeline/bin/run.py') > -1:
-            j['Portal'] = j['Owner']
-            j['ProcessId'] = "des-portal.{}".format(j.get('Process'))
-
-        j['ParentId'] = None
-
-        if j['JobId'] and j['JobId'].find('.0') < 0:
-            j['ParentId'] = j['ProcessId']
-
-        return j
-
-    def job_history(self, args, cols, limit, offset):
-
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
-
-        if not cols:
-            cols = '*'
-        else:
-            cols = ','.join(map(str, cols))
-            cols = 'distinct {}'.format(cols)
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
-
-        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ').replace('|', ' ' + 'OR' + ' ')
-
-        sql = ''
-
-        if requirements:
-            sql = 'select {} from condor_history where {}'.format(cols, requirements_sql)
-        else:
-            sql = 'select {} from condor_history'.format(cols)
-
-        sql_count = 'select count(*) from ({}) as query_count'.format(sql)
-
-        if('ordering' in args):
-            if(args['ordering'][0] == '-'):
-
-                sql = sql + ' ORDER BY "' + args['ordering'][1:] + '" DESC'
-            else:
-                sql = sql + ' ORDER BY "%' + args['ordering'] + '%" ASC'
-        else:
-            sql = sql + ' ORDER BY JobFinishedHookDone DESC'
-
-        if limit:
-            sql += ' limit {}'.format(limit)
-
-        if limit and offset:
-            sql += ' offset {}'.format(offset)
-
-        cur = get_db().cursor()
-        query = dict({
-            "data": query_dict(sql),
-            "total_count": query_one(sql_count),
-        })
-
-        return query
+        return rows
 
 
-    def job_parent_history(self, args, cols, limit, offset):
+    def top_users_history(self, sections):
+        """ Gets top users info from history """
 
-        search_fields = ['Job', 'ClusterName', 'JobFinishedHookDone', 'JobStartDate', 'Owner']
+        clusters = dict()
 
-        if not cols:
-            cols = '*'
-        else:
-            cols = ','.join(map(str, cols))
-            cols = 'distinct {}'.format(cols)
+        for section in sections:
+            parents_job = sections[section]
+            for parent_job in parents_job.get("data", []):
+                cluster = parent_job.get("ClusterName")
+                section = parent_job.get("Section")
+                if not cluster in clusters:
+                    clusters[cluster] = {
+                        "MaxEntries": self.config.get(section, "max_entries"),
+                        "Users": list()
+                    }
+                users = clusters[cluster]["Users"]
 
-        Parser = Utils()
-        requirements = Parser.parse_requirements(search_fields, **args)
+                for job in parent_job.get("Jobs"):
+                    username = job.get("User")
+                    has_user = list(filter(lambda x: x.get("User", "") == username, users))
 
-        if requirements:
-            requirements = "AND {}".format(requirements.replace('&', ' AND ').replace('|', ' OR '))
+                    if not has_user:
+                        user = {"User":username, "TotalExecutionTime": 0}
+                        users.append(user)
+                    else:
+                        user = has_user.pop()
 
-        sql = 'select {} from condor_history where ParentId is null {}'.format(cols, requirements)
-        sql_count = 'select count(*) from ({}) as query_count'.format(sql)
+                    user["TotalExecutionTime"] += job.get("ExecutionTime")
 
-        if('ordering' in args):
-            if(args['ordering'][0] == '-'):
-                sql = sql + ' ORDER BY "' + args['ordering'][1:] + '" DESC'
-            else:
-                sql = sql + ' ORDER BY "%' + args['ordering'] + '%" ASC'
-        else:
-            sql = sql + ' ORDER BY JobFinishedHookDone DESC'
-
-        if limit:
-            sql += ' limit {}'.format(limit)
-
-        if limit and offset:
-            sql += ' offset {}'.format(offset)
-
-        return dict({
-            "data": query_dict(sql),
-            "total_count": query_one(sql_count),
-        })
+        return clusters
 
 
-    def update_execution_time(self):
-        """ """
-        try:
-            jobs = self.job_history({}, None, None, None)
+    def users_running(self, sections):
+        """ Gets users info from jobs running """
 
-            for job in jobs['data']:
+        clusters = dict()
 
-                djob = dict(job)
+        for section in sections:
+            parents_job = sections[section]
+            nodes = self.cluster_info.get(section)
+            for parent_job in parents_job.get("data", []):
+                cluster = parent_job.get("ClusterName")
+                section = parent_job.get("Section")
+                if not cluster in clusters:
+                    clusters[cluster] = {
+                        "Cluster": cluster,
+                        "Users": list()
+                    }
+                users = clusters[cluster]["Users"]
+                for job in parent_job.get("Jobs"):
+                    username = job.get("User")
+                    has_user = list(filter(lambda x: x.get("User", "") == username, users))
+                    if not has_user:
+                        user = {
+                            'User': username, 'PortalJobs': 0, 'Processes': list(),
+                            'ManualJobs': 0, 'Cluster': job.get('ClusterName'),
+                            'Waiting': 0, 'Running': 0, 'Submitter': job.get('Submitter'),
+                            'Cores': 0, 'CoresPercentage': 0
+                        }
+                        users.append(user)
+                    else:
+                        user = has_user.pop()
 
-                start_date = datetime.datetime.strptime(djob['JobStartDate'], '%Y-%m-%d %H:%M:%S')
-                end_date = datetime.datetime.strptime(djob['JobFinishedHookDone'], '%Y-%m-%d %H:%M:%S')
+                    appid = job.get('ProcessId', job.get('ClusterId'))
+                    if not appid in user['Processes']:
+                        user['Processes'].append(appid)
 
-                execution_time = end_date - start_date
+                    if job.get("JobStatus") == "Running":
+                        user["Running"] += 1
+                        if 'RemoteHost' in job and 'RequiresWholeMachine' in job:
+                            host = job.get("RemoteHost")
+                            user["Cores"] += int(nodes.get(host).get('TotalCpus'))
+                        else:
+                            user["Cores"] += 1
 
-                print('Execution time [%s]: %s' % (type(execution_time), execution_time))
+                        div = len(nodes) / 100
+                        user['CoresPercentage'] = div * user['Cores'] / 100
 
-                execution_time = execution_time.total_seconds()
+                    elif job.get("JobStatus") == "Idle":
+                        user["Waiting"] += 1
+                    else:
+                        print("Warning: unmonitored {} status".format(job.get("JobStatus")))
 
-                if djob['JobID']:
-                    query_insert('UPDATE condor_history SET ExecutionTime = %f WHERE JobId = %f' % (execution_time, djob['JobID']))
-        except:
-            query_insert('ALTER TABLE condor_history ADD ExecutionTime REAL')
-            self.update_execution_time()
+                    if job.get("ProcessId", None):
+                        user["PortalJobs"] += 1
+                    else:
+                        user["ManualJobs"] += 1
 
-        return 'Done'
-
-
-    def top_users_history(self, args, limit):
-
-        Parser = Utils()
-        requirements = Parser.parse_requirements([], **args)
-
-        requirements_sql = requirements.replace('&', ' ' + 'AND' + ' ').replace('|', ' ' + 'OR' + ' ')
-
-        sql = ''
-
-        if requirements:
-            sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history WHERE {} GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'.format(requirements_sql)
-        else:
-            sql = 'SELECT Owner, SUM(ExecutionTime) as TotalExecutionTime from condor_history GROUP BY Owner ORDER BY SUM(ExecutionTime) DESC'
-
-        if limit:
-            sql += ' limit {}'.format(limit)
+        return clusters
 
 
-        # Descomente a linha abaixo na primeira vez que ligar e for chamar o endpoint "top_users".
-        # Ira, reatroativamente, preencher todas as colunas execution time de jobs passados.
-        # self.update_execution_time()
+    def __group_jobs(self, jobs, section):
+        """ Groups jobs by ClusterId and DES Science portal processes """
 
-        return query_dict(sql)
-
-
-    def update_db(self, days=10):
-        print ("Updating database")
-        cols, limit = list(), ''
-        days_ago = datetime.datetime.now() - datetime.timedelta(days)
-        args = {'JobFinishedHookDone__gt': str(days_ago.timestamp())}
-        jobs = self.get_cluster_history(args, cols, limit)
-        cur = get_db().cursor()
+        cluster_name = self.config.get(section, 'cluster_name')
+        cluster_dict, process_dict = dict(), dict()
 
         for job in jobs:
-            djob = self.parse_job_to_dict(job)
+            job = self.__parser_job(dict(job))
 
-            start_date = datetime.datetime.strptime(djob['QDate'], '%Y-%m-%d %H:%M:%S')
-            end_date = datetime.datetime.strptime(djob['JobFinishedHookDone'], '%Y-%m-%d %H:%M:%S')
+            # filtering identical attributes by group
+            job_attrs = {
+                "ClusterName": cluster_name,
+                "Section": section,
+                "Submitter": job.get("Submitter"),
+                "AppType": job.get("AppType"),
+                "AppName": job.get("AppName"),
+                "User": job.get("User"),
+                "Cmd": job.get("Cmd")
+            }
 
+            job.update(job_attrs)
+            job_attrs["Jobs"] = list()
+
+            if job.get('ProcessId'):
+                group = job.get('ProcessId')
+                if not group in process_dict:
+                    job_attrs.update({
+                        "Portal": job.get('Owner', ''),
+                        "ProcessId": group
+                    })
+                    process_dict[group] = job_attrs
+                process_dict[group]["Jobs"].append(job)
+            else:
+                group = job.get("ClusterId")
+                if not group in cluster_dict:
+                    job_attrs.update({
+                        "ClusterId": group
+                    })
+                    cluster_dict[group] = job_attrs
+                cluster_dict[group]["Jobs"].append(job)
+
+        job_list = list()
+
+        for key in cluster_dict.keys():
+            job_list.append(cluster_dict[key])
+
+        for key in process_dict.keys():
+            job_list.append(process_dict[key])
+
+        return job_list
+
+
+    def __get_cmd(self, cmd_initial, cols):
+        """ Gets HTCondor command """
+
+        count = len(cols)
+        cols_str = str()
+
+        for idx, arg in enumerate(cols):
+            if count == idx + 1:
+                cols_str += "-format '{}=\"%s\"\n\n' {} ".format(arg, arg)
+            else:
+                cols_str += "-format '{}=\"%s\"\n' {} ".format(arg, arg)
+
+        return '{} {}'.format(cmd_initial, cols_str)
+
+
+    def __get_remote_jobs(self, cmd_initial, cols, history=False):
+        """ Get remote jobs """
+
+        sections = list(filter(lambda x: x.find("-node") > 0, self.config.sections()))
+        jobs = dict()
+
+        for section in sections:
+            cmd = self.__get_remote_cmd(cmd_initial, section, cols, history)
+            ads = self.__run(cmd)
+            jobs[section] = self.__group_jobs(ads, section)
+
+        return jobs
+
+
+    def __get_remote_cmd(self, cmd_initial, section, cols, history=False):
+        """ Gets HTCondor remote command """
+
+        scheduler = self.config.get(section, "scheduler")
+        user = self.config.get(section, "user")
+        port = self.config.get(section, "port")
+        key = self.config.get(section, "key")
+
+        cmd_ini = cmd_initial
+        if history:
+            match = self.config.get(section, 'max_entries')
+            cmd_ini = "{} -match {}".format(cmd_initial, match)
+
+        cmdh = self.__get_cmd(cmd_ini, cols)
+
+        cmd = 'ssh {} -p {} -o "StrictHostKeyChecking no" -l {} -i {} "{}"'.format(scheduler, port, user, key, cmdh)
+        return cmd.replace('"%s"', '\\"%s\\"')
+
+
+    def __run(self, cmd):
+        """ Runs HTCondor command """
+
+        outputs = os.popen(cmd)
+        return classad.parseOldAds(outputs)
+
+
+    def __parser_job(self, job):
+        """ Handles job info """
+
+        job["AppType"] = job.get("AppType", "-")
+        job["AppName"] = job.get("AppName", "-")
+        job["AppModule"] = job.get("AppModule", "-")
+        job["ProcessId"] = job.get("AppId", None)
+        job["User"] = job.get("AppUser", job.get("Owner", None))
+
+        if job.get('Cmd', '').find('pypeline/bin/run.py') > -1:
+            job["AppType"] = "DES Science"
+
+            if not job.get("ProcessId"):
+                proc_args = job.get('Args', '').split(' ')
+                proc_args.reverse()
+                job["ProcessId"] = proc_args.pop()
+
+        submitter = job.get('GlobalJobId', '').split('.')
+        submitter.reverse()
+        submitter = submitter.pop()
+        job["Submitter"] = submitter
+
+        job["JobStatus"] = JOB_STATUS.get(str(job.get("JobStatus", "")), "-")
+
+        for _date in CONVERT_DATE:
+            if _date in job and job.get(_date, None):
+                job[_date] = datetime.datetime.fromtimestamp(
+                    int(job.get(_date))
+                ).strftime('%Y-%m-%d %H:%M:%S')
+
+        job['ExecutionTime'] = 0
+
+        if 'JobStartDate' in job and 'JobFinishedHookDone' in job:
+            start_date = datetime.datetime.strptime(job['JobStartDate'], '%Y-%m-%d %H:%M:%S')
+            end_date = datetime.datetime.strptime(job['JobFinishedHookDone'], '%Y-%m-%d %H:%M:%S')
             execution_time = end_date - start_date
+            job['ExecutionTime'] = execution_time.total_seconds()
 
-            execution_time = execution_time.total_seconds()
+        return job
 
-            query_insert('INSERT OR REPLACE INTO condor_history (JobId, Args, ClusterId, ClusterName, ParentId, GlobalJobId,\
-            Job,QDate,JobStartDate,CompletionDate,JobFinishedHookDone,\
-            JobStatus,Out,Owner,Process,RequestCpus,ServerTime,UserLog, \
-            RequiresWholeMachine,LastRemoteHost,ExecutionTime, Portal, ProcessId, Cmd) \
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', \
-            (djob['JobId'],djob['Args'], djob['ClusterId'], \
-            djob['ClusterName'], djob['ParentId'], djob['GlobalJobId'],djob['JobId'],djob['QDate'], \
-            djob['QDate'],djob['CompletionDate'], djob['JobFinishedHookDone'], \
-            djob['JobStatus'],djob['Out'],djob['Owner'],djob['Process'],djob['RequestCpus'], \
-            djob['ServerTime'],djob['UserLog'],djob['RequiresWholeMachine'],djob['LastRemoteHost'], \
-            execution_time, djob['Portal'], djob['ProcessId'], djob['Cmd']))
 
-        print("Done")
+    def __get_cluster_info(self):
+        """ """
+
+        sections = dict()
+
+        for section in self.config.sections():
+            sections[section] = self.__get_condor_status(section)
+
+        return sections
+
+
+    def __get_condor_status(self, section):
+        """ """
+
+        cols = ['Name', 'Memory','Disk', 'TotalCpus']
+
+        cmd_initial = "condor_status"
+
+        if section == 'main':
+            ads = list()
+            if self.config.get('main', 'condor_version') >= '8.8.0':
+                coll = htcondor.Collector()
+                ads = coll.query(htcondor.AdTypes.Startd, projection=cols)
+            else:
+                cmd = self.__get_cmd(cmd_initial, cols)
+                ads = self.__run(cmd)
+        else:
+            # get remote
+            cmd = self.__get_remote_cmd(cmd_initial, section, cols, history=False)
+            ads = self.__run(cmd)
+
+        nodes_dict = dict()
+        for item in ads:
+            node = dict(item)
+            name = node.pop("Name")
+            nodes_dict[name] = node
+
+        return nodes_dict
