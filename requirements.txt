@@ -7,7 +7,7 @@ chardet == 3.0.4
 Click == 7.0
 cryptography == 2.6.1
 Flask == 1.0.2
-Flask-Cors==3.0.8
+Flask-Cors==3.0.9
 gunicorn == 19.9.0
 htcondor == 8.9.1
 idna == 2.8
